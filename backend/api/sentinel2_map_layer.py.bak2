@@ -1,0 +1,94 @@
+﻿"""
+GeoShield AI Enterprise -- Sentinel-2 Live Map Layer
+Exposes tile-layer configuration for the Main Map, authenticated via the
+modern Copernicus Data Space Ecosystem (CDSE) OAuth2 client-credentials
+flow. Falls back to mock OSM tiles if credentials are missing or the
+token request fails, so the map never breaks outright.
+"""
+from __future__ import annotations
+
+import os
+import time
+from datetime import datetime, timezone
+
+import requests
+from fastapi import APIRouter
+from pydantic import BaseModel
+
+router = APIRouter(prefix="/api/sentinel2", tags=["sentinel2-map-layer"])
+
+CDSE_CLIENT_ID = os.getenv("CDSE_CLIENT_ID", "")
+CDSE_CLIENT_SECRET = os.getenv("CDSE_CLIENT_SECRET", "")
+CDSE_TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+SENTINELHUB_WMS_BASE = "https://sh.dataspace.copernicus.eu/ogc/wms"
+SENTINELHUB_LAYER = os.getenv("SENTINELHUB_LAYER", "TRUE_COLOR")
+MOCK_TILE_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+
+# Simple in-memory token cache -- avoids requesting a new OAuth token on
+# every single map load; CDSE tokens are typically valid for ~10 minutes.
+_token_cache = {"access_token": None, "expires_at": 0}
+
+
+def _get_cdse_token() -> str | None:
+    now = time.time()
+    if _token_cache["access_token"] and _token_cache["expires_at"] > now + 30:
+        return _token_cache["access_token"]
+
+    if not (CDSE_CLIENT_ID and CDSE_CLIENT_SECRET):
+        return None
+
+    try:
+        response = requests.post(
+            CDSE_TOKEN_URL,
+            data={
+                "grant_type": "client_credentials",
+                "client_id": CDSE_CLIENT_ID,
+                "client_secret": CDSE_CLIENT_SECRET,
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        data = response.json()
+        _token_cache["access_token"] = data["access_token"]
+        _token_cache["expires_at"] = now + data.get("expires_in", 300)
+        return _token_cache["access_token"]
+    except Exception as e:
+        print(f"[sentinel2_map_layer] CDSE token request failed: {e}")
+        return None
+
+
+class TileLayerConfig(BaseModel):
+    mode: str
+    kind: str
+    tile_url_template: str
+    wms_layer: str | None = None
+    checked_at: str
+    note: str
+
+
+@router.get("/tile-layer", response_model=TileLayerConfig)
+async def get_tile_layer() -> TileLayerConfig:
+    now = datetime.now(timezone.utc).isoformat()
+
+    token = _get_cdse_token()
+    if token:
+        # WMS tile URL authenticated via bearer token appended as a
+        # query param understood by the CDSE Sentinel Hub WMS endpoint.
+        tile_url = f"{SENTINELHUB_WMS_BASE}?access_token={token}"
+        return TileLayerConfig(
+            mode="live",
+            kind="wms",
+            tile_url_template=tile_url,
+            wms_layer=SENTINELHUB_LAYER,
+            checked_at=now,
+            note="Live Copernicus Data Space Sentinel Hub WMS endpoint (OAuth2 client-credentials).",
+        )
+
+    return TileLayerConfig(
+        mode="mock",
+        kind="xyz",
+        tile_url_template=MOCK_TILE_TEMPLATE,
+        wms_layer=None,
+        checked_at=now,
+        note="CDSE_CLIENT_ID / CDSE_CLIENT_SECRET not set or token request failed -- serving placeholder OSM tiles.",
+    )

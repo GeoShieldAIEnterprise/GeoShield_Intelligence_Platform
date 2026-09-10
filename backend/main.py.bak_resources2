@@ -5,13 +5,10 @@ from sqlalchemy.orm import Session
 import os
 
 from backend.database import get_db
-import sqlite3
-from pathlib import Path as _Path
 from backend.models import TileModel
 from backend.api.satellites import router as satellites_router
 from backend.routes.dashboard import router as dashboard_router
 from backend.api.sentinel2_map_layer import router as sentinel2_map_layer_router
-from backend.api.main_engine_api import router as main_engine_router
 
 app = FastAPI(title="GeoShield AI Enterprise", version="1.3.1")
 
@@ -22,7 +19,6 @@ if os.path.exists("frontend/static"):
 app.include_router(satellites_router)
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(sentinel2_map_layer_router)
-app.include_router(main_engine_router)
 
 @app.get("/api/latest-tile")
 def get_latest_tile(db: Session = Depends(get_db)):
@@ -52,22 +48,7 @@ def search_sentinel2(bbox: str = None, cloud_cover: int = 30, limit: int = 20):
 
 @app.get("/resources/{county_name}")
 def get_county_resources(county_name: str):
-    db_path = _Path("database/geoshield.db")
-    if not db_path.exists():
-        return []
-
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT name, category, county, latitude, longitude, status, capacity, contact "
-        "FROM infrastructure WHERE county = ?",
-        (county_name,),
-    )
-    rows = cursor.fetchall()
-    conn.close()
-
-    return [dict(row) for row in rows]
+    return {"county": county_name, "status": "active", "resources": ["Sentinel-2", "Water grids", "Emergency stations"]}
 
 @app.get("/county/{county_name}")
 def get_county_data(county_name: str):

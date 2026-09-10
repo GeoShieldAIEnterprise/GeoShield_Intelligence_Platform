@@ -14,9 +14,10 @@
     <link rel="stylesheet" href="/static/workspace-switcher.css">
     <link rel="stylesheet" href="/static/satellites.css">
 
-    <!-- LEAFLET -->
+    <!-- LEAFLET & HLS.JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
 <body>
 <div class="app">
@@ -27,18 +28,18 @@
             <span>Geospatial Intelligence Platform</span>
         </div>
         <nav>
-            <a class="active">🏠 Dashboard</a>
-            <a id="navLiveMap" style="cursor:pointer;">🗺️ Live Map</a>
-            <a>📈 Analytics</a>
-            <a>🚨 Alerts</a>
-            <a>📄 Reports</a>
+            <a class="active">?? Dashboard</a>
+            <a id="navLiveMap" style="cursor:pointer;">??? Live Map</a>
+            <a>?? Analytics</a>
+            <a>?? Alerts</a>
+            <a>?? Reports</a>
             <hr>
-            <a>🌊 Flood Engine</a>
-            <a>🔥 Fire Engine</a>
-            <a>🌍 Earthquake Engine</a>
-            <a>🌿 Agriculture</a>
+            <a>?? Flood Engine</a>
+            <a>?? Fire Engine</a>
+            <a>?? Earthquake Engine</a>
+            <a>?? Agriculture</a>
             <hr>
-            <a>⚙️ Settings</a>
+            <a>?? Settings</a>
         </nav>
     </aside>
 
@@ -52,16 +53,16 @@
             </div>
             <div class="top-actions">
                 <select id="incidentType">
-                    <option value="Fire">🔥 Fire</option>
-                    <option value="Flood">🌊 Flood</option>
-                    <option value="Earthquake">🌍 Earthquake</option>
-                    <option value="Drought">🌾 Drought</option>
-                    <option value="Disease">🦠 Disease</option>
+                    <option value="Fire">?? Fire</option>
+                    <option value="Flood">?? Flood</option>
+                    <option value="Earthquake">?? Earthquake</option>
+                    <option value="Drought">?? Drought</option>
+                    <option value="Disease">?? Disease</option>
                 </select>
-                <button id="locateBtn">📍 Locate</button>
-                <button>🛰️ Layers</button>
-                <button>🚨 Alerts</button>
-                <button>⚙️ Settings</button>
+                <button id="locateBtn">?? Locate</button>
+                <button>??? Layers</button>
+                <button>?? Alerts</button>
+                <button>?? Settings</button>
             </div>
         </header>
 
@@ -73,27 +74,27 @@
                 </section>
                 <aside class="info-panel">
                     <div class="panel-card">
-                        <h3>🟢 System Status</h3>
+                        <h3>?? System Status</h3>
                         <p id="health">Loading...</p>
                     </div>
                     <div class="panel-card">
-                        <h3>🌤️ Weather</h3>
+                        <h3>??? Weather</h3>
                         <p id="weather">Loading...</p>
                     </div>
                     <div class="panel-card">
-                        <h3>🚨 Active Alerts</h3>
+                        <h3>?? Active Alerts</h3>
                         <h1 id="events">0</h1>
                     </div>
                     <div class="panel-card">
-                        <h3>🤖 AI Risk</h3>
+                        <h3>?? AI Risk</h3>
                         <h1 id="aiScore">0%</h1>
                     </div>
                     <div class="panel-card">
-                        <h3>🕒 Last Update</h3>
+                        <h3>?? Last Update</h3>
                         <p id="lastUpdate">Loading...</p>
                     </div>
                     <div class="panel-card">
-                        <h3>🔥 Fire Risk</h3>
+                        <h3>?? Fire Risk</h3>
                         <h1 id="fireRisk">LOW</h1>
                     </div>
                 </aside>
@@ -133,7 +134,7 @@
             <section id="satelliteCenter" class="satellite-center">
                 <div class="satellite-center-header">
                     <div>
-                        <h2>🛰️ Satellite Intelligence</h2>
+                        <h2>??? Satellite Intelligence</h2>
                         <p>Connected Earth-observation data sources powering GeoShield geospatial intelligence.</p>
                     </div>
                     <div class="satellite-header-right" style="display: flex; align-items: center; gap: 12px;">
@@ -161,7 +162,7 @@
             <section id="sentinel2Product" class="sentinel2-product">
                 <div class="sentinel2-header">
                     <div>
-                        <h2>🛰️ Sentinel-2 Imagery</h2>
+                        <h2>??? Sentinel-2 Imagery</h2>
                         <p>Copernicus Sentinel-2 Earth observation imagery for geospatial intelligence and environmental analysis.</p>
                     </div>
                     <span id="sentinel2Status" class="sentinel2-status">Ready</span>
@@ -190,8 +191,8 @@
                     </div>
                 </div>
             </section>
-</section>
-</main>
+        </section>
+    </main>
 </div>
 
 <!-- LEAFLET JAVASCRIPT -->
@@ -210,8 +211,12 @@
 <script src="/static/legend.js"></script>
 <script src="/static/satellites.js?v=1788364370"></script>
 <script src="/static/sentinel2.js"></script>
+<script src="/static/sentinel2-map-layer.js"></script>
 <script src="/static/workspace-nav.js"></script>
 <script src="/static/map-layout-lock.js"></script>
 <script src="/static/app.js"></script>
+
 </body>
 </html>
+
+

@@ -1,3 +1,10 @@
+﻿from pathlib import Path
+
+# Let's inspect the CSS files causing the flex layout to fail.
+# We'll create a single unified style override script to fix the layout positioning immediately.
+
+css_fix_path = Path("frontend/static/workspace.css")
+content = """
 /* Workspace & Main Layout Fix */
 body.geoshield-body, html, body {
     margin: 0;
@@ -82,24 +89,6 @@ body.geoshield-body, html, body {
     border-radius: 8px;
     border: 1px solid #30363d;
 }
-
-/* Fix workspace panel proportions and prevent map dominance */
-.workspace-view, .geoshield-workspace {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    box-sizing: border-box;
-}
-
-#liveMap {
-    flex: 1;
-    width: 100%;
-    min-height: 350px;
-}
-
-.satellite-intelligence-panel, .dashboard-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    margin-top: 10px;
-}
+"""
+css_fix_path.write_text(content.strip(), encoding="utf-8")
+print("Applied flex layout override to workspace.css successfully.")

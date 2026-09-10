@@ -3,7 +3,7 @@ services:
     name: geoshield-osiri
     env: python
     plan: free
-    buildCommand: "pip install --upgrade pip \"setuptools<74.0\" wheel Cython numpy && pip install --no-build-isolation -r requirements.txt"
+    buildCommand: "pip install --upgrade pip setuptools wheel && pip install -r requirements.txt"
     startCommand: "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: PYTHON_VERSION
@@ -13,7 +13,7 @@ services:
     name: geoshield-platform
     env: python
     plan: free
-    buildCommand: "pip install --upgrade pip \"setuptools<74.0\" wheel Cython numpy && pip install --no-build-isolation -r requirements.txt"
+    buildCommand: "pip install --upgrade pip setuptools wheel && pip install -r requirements.txt"
     startCommand: "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: PYTHON_VERSION

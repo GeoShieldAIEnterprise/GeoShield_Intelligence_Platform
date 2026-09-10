@@ -1,10 +1,10 @@
-// ======================================================
+﻿// ======================================================
 // Dashboard Module
 // ======================================================
 
 function loadDashboard() {
 
-    fetch("/dashboard")
+    fetch("/api/dashboard")
 
         .then(response => response.json())
 

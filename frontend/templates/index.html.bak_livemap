@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -14,9 +14,10 @@
     <link rel="stylesheet" href="/static/workspace-switcher.css">
     <link rel="stylesheet" href="/static/satellites.css">
 
-    <!-- LEAFLET -->
+    <!-- LEAFLET & HLS.JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
 <body>
 <div class="app">
@@ -36,7 +37,7 @@
             <a>🌊 Flood Engine</a>
             <a>🔥 Fire Engine</a>
             <a>🌍 Earthquake Engine</a>
-            <a>🌿 Agriculture</a>
+            <a>🌾 Agriculture</a>
             <hr>
             <a>⚙️ Settings</a>
         </nav>
@@ -55,11 +56,11 @@
                     <option value="Fire">🔥 Fire</option>
                     <option value="Flood">🌊 Flood</option>
                     <option value="Earthquake">🌍 Earthquake</option>
-                    <option value="Drought">🌾 Drought</option>
-                    <option value="Disease">🦠 Disease</option>
+                    <option value="Drought">☀️ Drought</option>
+                    <option value="Disease">🧬 Disease</option>
                 </select>
                 <button id="locateBtn">📍 Locate</button>
-                <button>🛰️ Layers</button>
+                <button>🗂️ Layers</button>
                 <button>🚨 Alerts</button>
                 <button>⚙️ Settings</button>
             </div>
@@ -73,11 +74,11 @@
                 </section>
                 <aside class="info-panel">
                     <div class="panel-card">
-                        <h3>🟢 System Status</h3>
+                        <h3>🖥️ System Status</h3>
                         <p id="health">Loading...</p>
                     </div>
                     <div class="panel-card">
-                        <h3>🌤️ Weather</h3>
+                        <h3>☁️ Weather</h3>
                         <p id="weather">Loading...</p>
                     </div>
                     <div class="panel-card">
@@ -147,7 +148,7 @@
                     </div>
                 </div>
 
-                <!-- Viewport Container for Horizontal Track -->
+                <!-- Viewport Container for HorizontalTrack -->
                 <div id="satelliteGridViewport" class="satellite-grid-viewport">
                     <div id="satelliteGrid" class="satellite-grid">
                         <div class="satellite-loading">
@@ -190,8 +191,8 @@
                     </div>
                 </div>
             </section>
-</section>
-</main>
+        </section>
+    </main>
 </div>
 
 <!-- LEAFLET JAVASCRIPT -->
@@ -210,8 +211,10 @@
 <script src="/static/legend.js"></script>
 <script src="/static/satellites.js?v=1788364370"></script>
 <script src="/static/sentinel2.js"></script>
+<script src="/static/sentinel2-map-layer.js"></script>
 <script src="/static/workspace-nav.js"></script>
 <script src="/static/map-layout-lock.js"></script>
 <script src="/static/app.js"></script>
+
 </body>
 </html>

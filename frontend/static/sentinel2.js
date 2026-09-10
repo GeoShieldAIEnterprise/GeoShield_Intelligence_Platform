@@ -1,4 +1,4 @@
-/*
+﻿/*
 ============================================================
  GeoShield AI Enterprise
  Sentinel-2 Frontend Module
@@ -141,9 +141,7 @@ window.Sentinel2 = {
     setStatus(text, type = "normal") {
 
         const element =
-            document.getElementById(
-                "sentinel2-status"
-            );
+            document.querySelector(".sentinel2-status");
 
         if (!element) {
             return;
@@ -159,9 +157,7 @@ window.Sentinel2 = {
     setMessage(text) {
 
         const element =
-            document.getElementById(
-                "sentinel2-message"
-            );
+            document.querySelector(".sentinel2-message");
 
         if (element) {
 
@@ -544,7 +540,7 @@ window.Sentinel2 = {
             "";
 
         if (!value) {
-            return "—";
+            return "â€”";
         }
 
         return String(value).slice(0, 10);
@@ -564,7 +560,7 @@ window.Sentinel2 = {
             Number(value);
 
         if (Number.isNaN(number)) {
-            return "—";
+            return "â€”";
         }
 
         return number.toFixed(1);

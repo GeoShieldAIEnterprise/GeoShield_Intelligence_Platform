@@ -1219,34 +1219,3 @@ body {
 
 
 #liveMap { width: 100%; height: calc(100vh - 200px); min-height: 500px; border-radius: 8px; }
-
-/* ==================== MASTER PAGE VISIBILITY (root fix) ====================
-   Only ONE .geoshield-workspace-page should ever be visible at a time.
-   Without this rule, all three pages (Map / Intelligence / Live Map)
-   render simultaneously as siblings inside the .main-content grid,
-   which is what was pushing the info panel and bottom cards out of
-   view. This generalizes the pattern .geoshield-livemap-page already
-   used correctly to the other two pages. */
-.geoshield-workspace-page {
-    display: none;
-    min-height: 0;
-    overflow: hidden;
-}
-.geoshield-workspace-page.workspace-page-active {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-}
-.geoshield-map-page.workspace-page-active {
-    display: flex;
-    flex-direction: column;
-}
-.geoshield-map-page.workspace-page-active .workspace {
-    flex: 1;
-    min-height: 0;
-}
-.geoshield-intelligence-page.workspace-page-active {
-    display: block;
-    overflow-y: auto;
-    height: 100%;
-}

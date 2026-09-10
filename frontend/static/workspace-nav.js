@@ -1,8 +1,9 @@
-﻿(function () {
+(function () {
     "use strict";
 
     const MAP_PAGE = "geoshieldMapPage";
     const INTELLIGENCE_PAGE = "geoshieldIntelligencePage";
+    const LIVEMAP_PAGE = "geoshieldLiveMapPage";
 
     let currentWorkspace = "map";
 
@@ -11,6 +12,8 @@
         const mapPage = document.getElementById(MAP_PAGE);
         const intelligencePage =
             document.getElementById(INTELLIGENCE_PAGE);
+        const liveMapPage =
+            document.getElementById(LIVEMAP_PAGE);
 
         if (!mapPage || !intelligencePage) {
             console.error(
@@ -19,50 +22,49 @@
             return;
         }
 
-        currentWorkspace =
-            mode === "intelligence"
-                ? "intelligence"
+        currentWorkspace = mode === "intelligence"
+            ? "intelligence"
+            : mode === "livemap"
+                ? "livemap"
                 : "map";
 
-        const showMap =
-            currentWorkspace === "map";
+        const showMap = currentWorkspace === "map";
+        const showLiveMap = currentWorkspace === "livemap";
+        const showIntelligence = currentWorkspace === "intelligence";
 
-        mapPage.classList.toggle(
-            "workspace-page-active",
-            showMap
-        );
+        mapPage.classList.toggle("workspace-page-active", showMap);
+        intelligencePage.classList.toggle("workspace-page-active", showIntelligence);
 
-        intelligencePage.classList.toggle(
-            "workspace-page-active",
-            !showMap
-        );
+        if (liveMapPage) {
+            liveMapPage.classList.toggle("workspace-page-active", showLiveMap);
+        }
 
-        document.body.classList.toggle(
-            "geoshield-map-mode",
-            showMap
-        );
-
-        document.body.classList.toggle(
-            "geoshield-intelligence-mode",
-            !showMap
-        );
+        document.body.classList.toggle("geoshield-map-mode", showMap);
+        document.body.classList.toggle("geoshield-intelligence-mode", showIntelligence);
+        document.body.classList.toggle("geoshield-livemap-mode", showLiveMap);
 
         updateNavigator();
 
-        /*
-         * Leaflet may need to recalculate its dimensions
-         * after its containing workspace becomes visible.
-         */
         if (showMap) {
-            window.dispatchEvent(
-                new Event("resize")
-            );
+            window.dispatchEvent(new Event("resize"));
+        }
+
+        if (showLiveMap) {
+            if (window.GeoShieldLiveMap) {
+                window.GeoShieldLiveMap.init();
+                window.GeoShieldLiveMap.refreshIfVisible();
+            }
         }
 
         console.log(
             "GeoShield workspace:",
             currentWorkspace.toUpperCase()
         );
+    }
+
+
+    function goToLiveMap() {
+        setWorkspace("livemap");
     }
 
 
@@ -202,6 +204,16 @@
 
         setWorkspace("map");
 
+        const liveMapLink = document.getElementById("navLiveMap");
+        if (liveMapLink) {
+            liveMapLink.addEventListener("click", goToLiveMap);
+        }
+
+        const closeBtn = document.getElementById("liveMapCloseBtn");
+        if (closeBtn) {
+            closeBtn.addEventListener("click", goToMap);
+        }
+
         console.log(
             "GeoShield Workspace Navigation READY"
         );
@@ -212,6 +224,7 @@
         initialize,
         goToMap,
         goToIntelligence,
+        goToLiveMap,
 
         getCurrentWorkspace: function () {
             return currentWorkspace;

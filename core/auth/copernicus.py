@@ -1,4 +1,4 @@
-﻿"""
+"""
 GeoShield AI Enterprise
 Copernicus Authentication Manager
 """
@@ -94,7 +94,7 @@ class CopernicusAuthManager:
                         "username": settings.cdse_username,
                         "password": settings.cdse_password,
                     },
-                    timeout=settings.http_timeout,
+                    timeout=min(settings.http_timeout, 15),  # auth handshake should never need the full data-download timeout
                 )
 
             except requests.RequestException as exc:
