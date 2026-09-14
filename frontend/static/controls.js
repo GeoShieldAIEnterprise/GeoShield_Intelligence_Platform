@@ -1,26 +1,41 @@
-// ======================================================
+﻿// ======================================================
 // Controls Module
 // ======================================================
 
 function initializeControls() {
 
     // ----------------------------
-    // Search
+    // Search (Nominatim, no external plugin needed)
     // ----------------------------
 
-    L.Control.geocoder({
-        defaultMarkGeocode: false
-    })
+    const searchBtn = document.getElementById("dashboardSearchBtn");
+    const searchInput = document.getElementById("dashboardSearchInput");
 
-    .on("markgeocode", function (e) {
+    async function dashboardSearchLocation(query) {
+        if (!query || !query.trim()) return;
+        try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`);
+            const results = await res.json();
+            if (!results.length) {
+                alert("Location not found: " + query);
+                return;
+            }
+            const { lat, lon } = results[0];
+            map.setView([parseFloat(lat), parseFloat(lon)], 12);
+        } catch (error) {
+            console.error("[Dashboard] search failed:", error);
+            alert("Search failed. Check your connection.");
+        }
+    }
 
-        const center = e.geocode.center;
-
-        map.setView(center, 12);
-
-    })
-
-    .addTo(map);
+    if (searchBtn) {
+        searchBtn.addEventListener("click", () => dashboardSearchLocation(searchInput.value));
+    }
+    if (searchInput) {
+        searchInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") dashboardSearchLocation(searchInput.value);
+        });
+    }
 
     // ----------------------------
     // Locate Button
@@ -77,3 +92,4 @@ function initializeControls() {
     });
 
 }
+

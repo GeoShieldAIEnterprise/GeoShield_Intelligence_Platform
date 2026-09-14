@@ -347,176 +347,94 @@ border:1px solid #374151;
 box-shadow:0 0 10px rgba(0,0,0,.5);
 
 }
-/* ============================================================
-   GEOSHIELD COLLAPSIBLE WORKSPACE
-   FINAL NAVIGATION OVERRIDE
-   ============================================================ */
-
-.workspace {
-    display: block !important;
-    height: auto !important;
-    min-height: 0 !important;
-    overflow: visible !important;
-}
-
-.map-section {
-    display: block !important;
-    width: 100% !important;
-    height: 70vh !important;
-    min-height: 520px !important;
-    overflow: hidden !important;
-}
-
-#map {
-    display: block !important;
-    width: 100% !important;
-    height: 100% !important;
-    min-height: 520px !important;
-}
-
-#satelliteCenter[hidden] {
-    display: none !important;
-}
-
-#satelliteCenter.workspace-intelligence-active {
-    display: block !important;
-    width: 100% !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    height: auto !important;
-    min-height: 0 !important;
-    overflow: visible !important;
-    margin-top: 24px !important;
-    margin-bottom: 80px !important;
-}
-
-#satelliteCenter.workspace-intelligence-active
-.satellite-grid {
-    display: grid !important;
-}
-
-#satelliteCenter.workspace-intelligence-active
-.satellite-center-header {
-    display: flex !important;
-}
-
-#sentinel2Product {
-    position: relative !important;
-    width: 100% !important;
-    height: auto !important;
-    min-height: 0 !important;
-    overflow: visible !important;
-}
-
-.workspace-navigator {
-    position: fixed !important;
-    left: 50% !important;
-    bottom: 24px !important;
-    transform: translateX(-50%) !important;
-    z-index: 99999 !important;
-
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-
-    gap: 10px !important;
-
-    padding: 8px 10px !important;
-
-    border-radius: 16px !important;
-}
-
-.workspace-nav-arrow {
-    width: 46px !important;
-    height: 46px !important;
-
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-
-    cursor: pointer !important;
-
-    font-size: 24px !important;
-    line-height: 1 !important;
-}
-
-.workspace-nav-arrow:disabled {
-    opacity: 0.35 !important;
-    cursor: default !important;
-}
-
-.workspace-nav-divider {
-    width: 1px !important;
-    height: 28px !important;
-}
 
 /* ============================================================
-   END FINAL WORKSPACE OVERRIDE
+   GEOSHIELD OS -- CONSOLIDATED LAYOUT STYLESHEET
+   Single source of truth. No duplicate or conflicting rules.
    ============================================================ */
 
-/* ============================================================
-   GEOSHIELD WORKSPACE FINAL LAYOUT
-   Main Map = isolated full workspace
-   Satellite Intelligence = isolated full workspace
-   ============================================================ */
-
-/* ---------- GLOBAL VIEWPORT CONTROL ---------- */
-
-html,
-body {
+html, body {
     width: 100%;
     height: 100%;
     margin: 0;
+    padding: 0;
     overflow-x: hidden;
+    background-color: #0d1117;
+    color: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-/* ---------- MAIN APPLICATION ---------- */
+/* ---------- MAIN APPLICATION SHELL ---------- */
+/* Two rows only: header, and one content row that holds whichever
+   workspace page is currently active. Individual pages (Map page)
+   manage their own internal sub-layout (map+panel, bottom bar). */
 
 .main-content {
     display: grid;
-    grid-template-rows: 60px minmax(0, 1fr) 88px;
+    grid-template-rows: 60px minmax(0, 1fr);
     height: 100vh;
     min-height: 100vh;
     overflow: hidden;
 }
 
-/* ---------- MAIN MAP WORKSPACE ---------- */
+/* ---------- WORKSPACE PAGE STACKING ---------- */
+/* All workspace pages occupy the SAME grid cell. Only the active
+   one is display:flex; the rest are display:none. This is what
+   keeps the layout correct regardless of how many pages exist. */
+
+.geoshield-workspace-page {
+    grid-column: 1;
+    grid-row: 2;
+    display: none;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.geoshield-workspace-page.workspace-page-active {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* ---------- MAIN MAP PAGE (internal layout) ---------- */
+/* workspace (map + info panel) gets remaining space;
+   bottom-dashboard is a fixed-height strip beneath it. */
+
+.geoshield-map-page.workspace-page-active .workspace {
+    flex: 1;
+    min-height: 0;
+}
+
+.geoshield-map-page.workspace-page-active .bottom-dashboard {
+    flex: 0 0 88px;
+}
 
 .workspace {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 280px;
     gap: 12px;
-
     width: 100%;
     min-width: 0;
-    min-height: 0;
-
     box-sizing: border-box;
     padding: 8px;
-
     overflow: hidden;
 }
 
-/* Map takes the complete available map area */
-
 .map-section {
+    grid-column: 1;
     width: 100%;
     height: 100%;
     min-width: 0;
     min-height: 0;
-
     padding: 0;
     overflow: hidden;
 }
-
-/* Leaflet map */
 
 #map {
     width: 100%;
     height: 100%;
     min-width: 0;
     min-height: 0;
-
     border-radius: 14px;
     overflow: hidden;
 }
@@ -524,48 +442,35 @@ body {
 /* ---------- RIGHT INFORMATION PANEL ---------- */
 
 .info-panel {
+    grid-column: 2;
     width: 280px;
     min-width: 280px;
     max-width: 280px;
-
     box-sizing: border-box;
-
     background: #111827;
     border-left: 1px solid #263449;
-
     padding: 10px;
-
     overflow-y: auto;
     overflow-x: hidden;
-
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
 
-/* Keep right-side cards compact */
-
 .panel-card {
     width: 100%;
-    min-height: 0;
+    min-height: 78px;
     height: auto;
-
     box-sizing: border-box;
-
     background: #1f2937;
     border-radius: 12px;
-
-    padding: 10px 12px;
-
+    padding: 12px 14px;
     display: flex;
     flex-direction: column;
     justify-content: center;
-
     overflow: hidden;
     position: relative;
-
     box-shadow: 0 2px 6px rgba(0,0,0,.18);
-
     transition: .25s;
 }
 
@@ -573,7 +478,6 @@ body {
     font-size: 14px;
     font-weight: 600;
     margin: 0 0 6px 0;
-
     display: flex;
     align-items: center;
     gap: 7px;
@@ -596,588 +500,89 @@ body {
 
 .bottom-dashboard {
     display: grid;
-
     grid-auto-flow: column;
     grid-auto-columns: minmax(130px, 150px);
-
     gap: 10px;
-
     width: 100%;
     min-width: 0;
-
     box-sizing: border-box;
-
     overflow-x: auto;
     overflow-y: hidden;
-
     padding: 8px 10px;
-
     background: #111827;
     border-top: 1px solid #263449;
-
-    height: 88px;
-
     align-items: center;
 }
-
-/* Compact horizontal cards */
 
 .bottom-card {
     width: 100%;
     height: 62px;
-
     box-sizing: border-box;
-
     background: #1f2937;
     border-radius: 12px;
-
     padding: 9px 10px;
-
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-
     overflow: hidden;
 }
 
-.bottom-card h3,
-.bottom-card h4,
-.bottom-card p {
-    margin: 0;
+.bottom-card h3, .bottom-card h4, .bottom-card p { margin: 0; }
+.bottom-card h3, .bottom-card h4 { font-size: 13px; }
+.bottom-card p { font-size: 11px; }
+
+/* ---------- SATELLITE INTELLIGENCE PAGE ---------- */
+
+.geoshield-intelligence-page.workspace-page-active {
+    display: block;
+    overflow-y: auto;
+    height: 100%;
 }
-
-.bottom-card h3,
-.bottom-card h4 {
-    font-size: 13px;
-}
-
-.bottom-card p {
-    font-size: 11px;
-}
-
-/* ============================================================
-   SATELLITE INTELLIGENCE
-   ============================================================ */
-
-/*
-   The older satelliteDataCenter duplicates the newer
-   satelliteCenter. Hide only the obsolete duplicate.
-*/
 
 #satelliteDataCenter {
-    display: none !important;
+    display: none;
 }
-
-/*
-   Satellite Intelligence becomes its own isolated workspace.
-   It must never visually occupy the Main Map workspace.
-*/
 
 #satelliteCenter {
     width: 100%;
-    min-height: 100vh;
-
     box-sizing: border-box;
-
-    position: relative;
-
-    padding: 40px 5vw 100px 5vw;
-
+    padding: 40px 5vw;
     background: #0b1220;
-
-    overflow-x: hidden;
-    overflow-y: auto;
-
-    isolation: isolate;
-
-    scroll-margin-top: 0;
 }
-
-/* Make the intelligence header readable */
 
 #satelliteCenter .satellite-center-header {
     width: 100%;
     max-width: 1400px;
-
     margin: 0 auto 30px auto;
 }
 
-/* Larger intelligence typography */
+#satelliteCenter h2 { font-size: 30px; line-height: 1.2; }
+#satelliteCenter p { font-size: 15px; line-height: 1.6; }
 
-#satelliteCenter h2 {
-    font-size: 30px;
-    line-height: 1.2;
-}
-
-#satelliteCenter p {
-    font-size: 15px;
-    line-height: 1.6;
-}
-
-/* Intelligence cards */
-
-#satelliteCenter .satellite-grid {
-    width: 100%;
-    max-width: 1400px;
-
-    margin: 0 auto;
-
-    display: grid;
-
-    grid-template-columns: repeat(
-        auto-fit,
-        minmax(260px, 1fr)
-    );
-
-    gap: 18px;
-
-    align-items: stretch;
-}
-
-/* Sentinel-2 product belongs to the intelligence workspace */
-
-#sentinel2Product {
-    width: 100%;
-    min-height: 70vh;
-
-    box-sizing: border-box;
-
-    padding: 40px 5vw 100px 5vw;
-
-    background: #0b1220;
-
-    overflow-x: hidden;
-}
-
-/* ============================================================
-   WORKSPACE SEPARATION
-   ============================================================ */
-
-/*
-   Ensure satellite content cannot visually leak into
-   the Main Map viewport.
-*/
-
-.workspace,
-.topbar,
-.bottom-dashboard {
-    position: relative;
-    z-index: 2;
-}
-
-/*
-   Satellite sections stay below the Main Map workspace.
-*/
-
-#satelliteCenter,
-#sentinel2Product {
-    position: relative;
-    z-index: 1;
-}
-
-/* ============================================================
-   NAVIGATION ARROWS
-   Small, fixed, far-right controls
-   ============================================================ */
-
-.workspace-navigator {
-    position: fixed !important;
-
-    right: 16px !important;
-    left: auto !important;
-
-    bottom: 50% !important;
-
-    transform: translateY(50%) !important;
-
-    width: 38px !important;
-
-    display: flex !important;
-    flex-direction: column !important;
-
-    align-items: center !important;
-    justify-content: center !important;
-
-    gap: 5px !important;
-
-    padding: 5px !important;
-
-    z-index: 99999 !important;
-
-    background: rgba(15, 23, 42, .92) !important;
-
-    border: 1px solid #334155 !important;
-
-    border-radius: 12px !important;
-
-    box-shadow: 0 8px 24px rgba(0,0,0,.35) !important;
-
-    backdrop-filter: blur(8px);
-}
-
-.workspace-nav-arrow {
-    width: 28px !important;
-    height: 28px !important;
-
-    min-width: 28px !important;
-    min-height: 28px !important;
-
-    padding: 0 !important;
-
-    display: flex !important;
-
-    align-items: center !important;
-    justify-content: center !important;
-
-    border: none !important;
-    border-radius: 7px !important;
-
-    background: #1e293b !important;
-    color: white !important;
-
-    font-size: 16px !important;
-
-    cursor: pointer !important;
-}
-
-.workspace-nav-arrow:hover {
-    background: #2563eb !important;
-}
-
-.workspace-nav-arrow:disabled {
-    opacity: .35 !important;
-    cursor: default !important;
-}
-
-.workspace-nav-divider {
-    width: 18px !important;
-    height: 1px !important;
-
-    background: #475569 !important;
-
-    margin: 1px 0 !important;
-}
-
-/* ============================================================
-   RESPONSIVE FALLBACK
-   ============================================================ */
-
-@media (max-width: 900px) {
-
-    .workspace {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .info-panel {
-        display: none;
-    }
-
-    .bottom-dashboard {
-        grid-auto-columns: 130px;
-    }
-
-    #satelliteCenter {
-        padding-left: 24px;
-        padding-right: 24px;
-    }
-
-    #sentinel2Product {
-        padding-left: 24px;
-        padding-right: 24px;
-    }
-
-}
-
-
-/* ============================================================
-   GEOSHIELD FINAL MAP PANEL CORRECTION
-   ============================================================ */
-
-/* Main application keeps the original 3-row architecture */
-.main-content {
-    display: grid !important;
-
-    grid-template-rows:
-        60px
-        minmax(0, 1fr)
-        88px !important;
-
-    height: 100vh !important;
-    min-height: 100vh !important;
-
-    overflow: hidden !important;
-}
-
-/* Main map area = ONLY the map + right information panel */
-.workspace {
-    display: grid !important;
-
-    grid-template-columns:
-        minmax(0, 1fr)
-        280px !important;
-
-    grid-template-rows: minmax(0, 1fr) !important;
-
-    gap: 12px !important;
-
-    width: 100% !important;
-    height: 100% !important;
-
-    min-width: 0 !important;
-    min-height: 0 !important;
-
-    box-sizing: border-box !important;
-
-    padding: 8px !important;
-
-    overflow: hidden !important;
-}
-
-/* Map stays entirely inside the left column */
-.map-section {
-    grid-column: 1 !important;
-    grid-row: 1 !important;
-
-    width: 100% !important;
-    height: 100% !important;
-
-    min-width: 0 !important;
-    min-height: 0 !important;
-
-    padding: 0 !important;
-
-    overflow: hidden !important;
-}
-
-/* Map fills its column */
-#map {
-    width: 100% !important;
-    height: 100% !important;
-
-    min-width: 0 !important;
-    min-height: 0 !important;
-
-    border-radius: 14px !important;
-
-    overflow: hidden !important;
-}
-
-/* Right information cards remain on the RIGHT */
-.info-panel {
-    grid-column: 2 !important;
-    grid-row: 1 !important;
-
-    width: 280px !important;
-    min-width: 280px !important;
-    max-width: 280px !important;
-
-    height: 100% !important;
-
-    box-sizing: border-box !important;
-
-    display: flex !important;
-    flex-direction: column !important;
-
-    gap: 10px !important;
-
-    padding: 10px !important;
-
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-
-    background: #111827 !important;
-
-    border-left: 1px solid #263449 !important;
-}
-
-/* Preserve sensible card sizes */
-.info-panel .panel-card {
-    flex: 0 0 auto !important;
-
-    width: 100% !important;
-
-    min-height: 78px !important;
-
-    height: auto !important;
-
-    box-sizing: border-box !important;
-
-    padding: 12px 14px !important;
-
-    overflow: hidden !important;
-}
-
-/* Bottom dashboard belongs ONLY to the bottom row */
-.bottom-dashboard {
-    grid-column: 1 / -1 !important;
-    grid-row: 3 !important;
-
-    display: grid !important;
-
-    grid-auto-flow: column !important;
-    grid-auto-columns: 150px !important;
-
-    grid-template-rows: 1fr !important;
-
-    gap: 10px !important;
-
-    width: 100% !important;
-    height: 88px !important;
-
-    min-width: 0 !important;
-
-    box-sizing: border-box !important;
-
-    align-items: center !important;
-
-    padding: 8px 10px !important;
-
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-
-    background: #111827 !important;
-
-    border-top: 1px solid #263449 !important;
-}
-
-/* Bottom cards stay compact and horizontal */
-.bottom-dashboard .bottom-card {
-    width: 150px !important;
-    min-width: 150px !important;
-
-    height: 62px !important;
-
-    box-sizing: border-box !important;
-
-    padding: 10px !important;
-
-    overflow: hidden !important;
-}
-
-/* ============================================================
-   SATELLITE INTELLIGENCE — SINGLE NAVIGATOR
-   ============================================================ */
-
-/* Never allow a second generated navigator */
-.workspace-navigator + .workspace-navigator {
-    display: none !important;
-}
-
-/* There must be exactly one visible workspace navigator */
-.workspace-navigator {
-    position: fixed !important;
-
-    right: 14px !important;
-    left: auto !important;
-
-    top: 50% !important;
-    bottom: auto !important;
-
-    transform: translateY(-50%) !important;
-
-    width: 38px !important;
-
-    z-index: 999999 !important;
-
-    display: flex !important;
-
-    flex-direction: column !important;
-
-    align-items: center !important;
-    justify-content: center !important;
-
-    gap: 5px !important;
-
-    padding: 5px !important;
-
-    box-sizing: border-box !important;
-
-    background: rgba(15, 23, 42, .94) !important;
-
-    border: 1px solid #334155 !important;
-
-    border-radius: 10px !important;
-
-    box-shadow: 0 8px 24px rgba(0,0,0,.35) !important;
-}
-
-.workspace-nav-arrow {
-    width: 28px !important;
-    height: 28px !important;
-
-    min-width: 28px !important;
-    min-height: 28px !important;
-
-    padding: 0 !important;
-
-    display: flex !important;
-
-    align-items: center !important;
-    justify-content: center !important;
-
-    font-size: 16px !important;
-
-    border-radius: 7px !important;
-
-    background: #1e293b !important;
-
-    color: white !important;
-
-    border: none !important;
-}
-
-.workspace-nav-divider {
-    width: 18px !important;
-    height: 1px !important;
-
-    margin: 1px 0 !important;
-
-    background: #475569 !important;
-}
-
-
-
-
-
-/* Satellite Grid Native Horizontal Track & Capsule Scrollbar Styling */
 #satelliteGrid {
-    display: flex !important;
-    flex-wrap: nowrap !important;
-    overflow-x: auto !important;
-    scroll-behavior: smooth !important;
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scroll-behavior: smooth;
     gap: 24px;
     padding-bottom: 12px;
     scrollbar-width: thin;
     scrollbar-color: #64748b #1e293b;
 }
+#satelliteGrid::-webkit-scrollbar { height: 8px; }
+#satelliteGrid::-webkit-scrollbar-track { background: #0f172a; border-radius: 4px; }
+#satelliteGrid::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+#satelliteGrid::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
-#satelliteGrid::-webkit-scrollbar {
-    height: 8px;
-}
-
-#satelliteGrid::-webkit-scrollbar-track {
-    background: #0f172a;
-    border-radius: 4px;
-}
-
-#satelliteGrid::-webkit-scrollbar-thumb {
-    background: #475569;
-    border-radius: 4px;
+#sentinel2Product {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 40px 5vw;
+    background: #0b1220;
 }
 
-#satelliteGrid::-webkit-scrollbar-thumb:hover {
-    background: #64748b;
-}
+/* ---------- LIVE MAP PAGE ---------- */
 
-/* ==================== LIVE MAP PAGE ==================== */
-.geoshield-livemap-page {
-    display: none;
-    flex-direction: column;
-    height: 100%;
-}
-.geoshield-livemap-page.workspace-page-active {
-    display: flex;
-}
 .livemap-header {
     display: flex;
     justify-content: space-between;
@@ -1185,6 +590,7 @@ body {
     padding: 12px 20px;
     background: #0f172a;
     border-bottom: 1px solid #1e293b;
+    flex: 0 0 auto;
 }
 .livemap-controls {
     display: flex;
@@ -1209,44 +615,92 @@ body {
     font-size: 16px;
     cursor: pointer;
 }
-.livemap-close-btn:hover {
-    background: #475569;
-}
+.livemap-close-btn:hover { background: #475569; }
+
 .livemap-container {
     flex: 1;
+    min-height: 0;
     width: 100%;
 }
 
-
-#liveMap { width: 100%; height: calc(100vh - 200px); min-height: 500px; border-radius: 8px; }
-
-/* ==================== MASTER PAGE VISIBILITY (root fix) ====================
-   Only ONE .geoshield-workspace-page should ever be visible at a time.
-   Without this rule, all three pages (Map / Intelligence / Live Map)
-   render simultaneously as siblings inside the .main-content grid,
-   which is what was pushing the info panel and bottom cards out of
-   view. This generalizes the pattern .geoshield-livemap-page already
-   used correctly to the other two pages. */
-.geoshield-workspace-page {
-    display: none;
-    min-height: 0;
-    overflow: hidden;
-}
-.geoshield-workspace-page.workspace-page-active {
-    display: flex;
-    flex-direction: column;
+#liveMap {
+    width: 100%;
     height: 100%;
-}
-.geoshield-map-page.workspace-page-active {
-    display: flex;
-    flex-direction: column;
-}
-.geoshield-map-page.workspace-page-active .workspace {
-    flex: 1;
     min-height: 0;
 }
-.geoshield-intelligence-page.workspace-page-active {
-    display: block;
-    overflow-y: auto;
-    height: 100%;
+
+/* ---------- WORKSPACE NAVIGATOR (single definition) ---------- */
+
+.workspace-navigator {
+    position: fixed;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 38px;
+    z-index: 999999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 5px;
+    box-sizing: border-box;
+    background: rgba(15, 23, 42, .94);
+    border: 1px solid #334155;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+
+.workspace-nav-arrow {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    border-radius: 7px;
+    background: #1e293b;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+.workspace-nav-arrow:hover:not(:disabled) { background: #2563eb; }
+.workspace-nav-arrow:disabled { opacity: .35; cursor: default; }
+
+.workspace-nav-divider {
+    width: 18px;
+    height: 1px;
+    margin: 1px 0;
+    background: #475569;
+}
+
+/* ---------- FIRE PULSE ANIMATION ---------- */
+
+@keyframes pulseFire {
+    0%   { transform: scale(1);   opacity: 1;  filter: drop-shadow(0 0 2px red); }
+    50%  { transform: scale(1.6); opacity: .6; filter: drop-shadow(0 0 12px orange); }
+    100% { transform: scale(1);   opacity: 1;  filter: drop-shadow(0 0 2px red); }
+}
+
+.legend {
+    background: #1f2937;
+    padding: 12px;
+    border-radius: 10px;
+    color: white;
+    font-size: 13px;
+    line-height: 22px;
+    border: 1px solid #374151;
+    box-shadow: 0 0 10px rgba(0,0,0,.5);
+}
+
+/* ---------- RESPONSIVE FALLBACK ---------- */
+
+@media (max-width: 900px) {
+    .workspace { grid-template-columns: minmax(0, 1fr); }
+    .info-panel { display: none; }
+    .bottom-dashboard { grid-auto-columns: 130px; }
+    #satelliteCenter, #sentinel2Product { padding-left: 24px; padding-right: 24px; }
 }

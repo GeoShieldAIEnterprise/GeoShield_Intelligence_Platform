@@ -1,10 +1,12 @@
-"""
+﻿"""
 GeoShield AI Enterprise
 Copernicus Authentication Manager
 """
 
 from __future__ import annotations
 
+import json
+import subprocess
 import time
 from dataclasses import dataclass
 
@@ -78,7 +80,7 @@ class CopernicusAuthManager:
             )
 
     def authenticate(self) -> str:
-        """Authenticate against Copernicus Data Space."""
+        """Authenticate against Copernicus Data Space via curl (Schannel), bypassing an OpenSSL/renegotiation incompatibility with this server."""
 
         self._validate_configuration()
 
@@ -86,18 +88,22 @@ class CopernicusAuthManager:
 
         for attempt in range(1, attempts + 1):
             try:
-                response = requests.post(
-                    settings.cdse_token_url,
-                    data={
-                        "grant_type": "password",
-                        "client_id": settings.cdse_client_id,
-                        "username": settings.cdse_username,
-                        "password": settings.cdse_password,
-                    },
-                    timeout=min(settings.http_timeout, 15),  # auth handshake should never need the full data-download timeout
+                result = subprocess.run(
+                    [
+                        "curl.exe", "-s", "--max-time", "20",
+                        "-X", "POST",
+                        settings.cdse_token_url,
+                        "--data-urlencode", "grant_type=password",
+                        "--data-urlencode", f"client_id={settings.cdse_client_id}",
+                        "--data-urlencode", f"username={settings.cdse_username}",
+                        "--data-urlencode", f"password={settings.cdse_password}",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=25,
                 )
 
-            except requests.RequestException as exc:
+            except (subprocess.SubprocessError, OSError) as exc:
                 if attempt >= attempts:
                     raise CopernicusNetworkError(
                         "Unable to reach Copernicus authentication service."
@@ -106,48 +112,33 @@ class CopernicusAuthManager:
                 time.sleep(1)
                 continue
 
-            if response.status_code in (400, 401, 403):
-                detail = ""
-
-                try:
-                    payload = response.json()
-
-                    error = payload.get("error")
-                    description = payload.get("error_description")
-
-                    if error:
-                        detail = f" Error: {error}."
-
-                    if description:
-                        detail += f" {description}"
-
-                except ValueError:
-                    pass
-
-                raise CopernicusAuthenticationError(
-                    "Copernicus rejected the authentication request."
-                    + detail
-                )
-
-            try:
-                response.raise_for_status()
-
-            except requests.RequestException as exc:
+            if result.returncode != 0:
                 if attempt >= attempts:
                     raise CopernicusNetworkError(
-                        "Copernicus authentication request failed."
-                    ) from exc
+                        f"curl failed with code {result.returncode}: {result.stderr}"
+                    )
 
                 time.sleep(1)
                 continue
 
             try:
-                payload = response.json()
+                payload = json.loads(result.stdout)
 
             except ValueError as exc:
                 raise CopernicusAuthenticationError(
                     "Copernicus returned an invalid authentication response."
                 ) from exc
+
+            if "error" in payload:
+                detail = f" Error: {payload.get('error')}."
+                description = payload.get("error_description")
+
+                if description:
+                    detail += f" {description}"
+
+                raise CopernicusAuthenticationError(
+                    "Copernicus rejected the authentication request." + detail
+                )
 
             token = payload.get("access_token")
 
@@ -169,7 +160,6 @@ class CopernicusAuthManager:
             safety_margin = 60
 
             self.state.access_token = token
-
             self.state.expires_at = (
                 time.time()
                 + max(expires_in_seconds - safety_margin, 1)

@@ -28,6 +28,10 @@ if (typeof initializeMap === "function") {
     initializeMap();
 }
 
+if (typeof initializeControls === "function") {
+    initializeControls();
+}
+
 if (typeof loadCounties === "function") {
     loadCounties();
 }
@@ -53,3 +57,4 @@ if (document.readyState === "loading") {
 } else {
     initializeSentinel2Safe();
 }
+

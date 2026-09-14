@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -33,7 +33,8 @@
             <a>🚨 Alerts</a>
             <a>📄 Reports</a>
             <hr>
-            <a>🌊 Flood Engine</a>
+            <a id="navDrought" style="cursor:pointer;">🌾 Drought Engine</a>
+            <a id="navFlood" style="cursor:pointer;">🌊 Flood Engine</a>
             <a>🔥 Fire Engine</a>
             <a>🌍 Earthquake Engine</a>
             <a>🌿 Agriculture</a>
@@ -58,11 +59,8 @@
                     <option value="Drought">🌾 Drought</option>
                     <option value="Disease">🦠 Disease</option>
                 </select>
-                <button id="locateBtn">📍 Locate</button>
-                <button>🛰️ Layers</button>
-                <button>🚨 Alerts</button>
-                <button>⚙️ Settings</button>
-            </div>
+                <input type="text" id="dashboardSearchInput" placeholder="Search a location..." style="margin-right:6px;"><button id="locateBtn">📍 Locate</button>
+                </div>
         </header>
 
         <!-- GEOSHIELD MAIN MAP PAGE -->
@@ -129,6 +127,104 @@
         </section>
 
         <!-- GEOSHIELD SATELLITE INTELLIGENCE PAGE -->
+        <!-- GEOSHIELD LIVE MAP PAGE (Sentinel-2 imagery) -->
+        <section id="geoshieldLiveMapPage" class="geoshield-workspace-page geoshield-livemap-page">
+            <div class="livemap-header">
+                <div>
+                    <h2>🛰️ Live Map -- Sentinel-2 Imagery</h2>
+                    <p id="liveMapSceneInfo">Loading latest scene...</p>
+                </div>
+                <div class="livemap-controls">
+                    <input type="text" id="liveMapSearchInput" placeholder="Search a location..." style="margin-right:6px;">
+                    <button type="button" id="liveMapSearchBtn">Search</button>
+                    <label><input type="radio" name="liveMapView" value="satellite" checked> Satellite</label>
+                    <label><input type="radio" name="liveMapView" value="street"> Street</label>
+                    <button type="button" id="liveMapCloseBtn" class="livemap-close-btn" title="Return to Main Map">✕</button>
+                </div>
+            </div>
+            <div id="liveMap" class="livemap-container"></div>
+        </section>
+
+        <!-- GEOSHIELD FLOOD ENGINE PAGE -->
+        <section id="geoshieldFloodPage" class="geoshield-workspace-page geoshield-flood-page">
+            <div class="livemap-header">
+                <div>
+                    <h2>🌊 Flood Engine -- VIIRS / GPM / ERA5</h2>
+                    <p id="floodSceneInfo">Loading flood intelligence...</p>
+                </div>
+                <div class="livemap-controls">
+                    <input type="text" id="floodSearchInput" placeholder="Search a location...">
+                    <label><input type="radio" name="floodMapView" value="satellite" checked> Satellite</label>
+                    <label><input type="radio" name="floodMapView" value="street"> Street</label>
+                    <label><input type="radio" name="floodMapView" value="sar"> Radar (Sentinel-1)</label>
+                    <button type="button" id="floodCloseBtn" class="livemap-close-btn" title="Return to Main Map">✕</button>
+                </div>
+            </div>
+            <div id="floodMap" class="livemap-container"></div>
+            <div id="floodSummaryPanel" class="drought-summary-panel">
+                <div class="drought-summary-card" style="display:flex; gap:12px; align-items:center;">
+                    <span>🌊 Flood risk (rainfall):</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;background:#a8d8ff;"></span> Low (&lt;800mm)</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;background:#4a90e2;"></span> Medium (800-1199mm)</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;background:#0d47a1;"></span> High (&ge;1200mm)</span>
+                </div>
+                <div class="drought-summary-card">
+                    <span>🔥 Live VIIRS Hotspots (Kenya-wide, active-fire proxy)</span>
+                    <strong id="floodHotspotCount">--</strong>
+                </div>
+                <div class="drought-summary-card">
+                    <span>🌊 Highest Flood Risk County</span>
+                    <strong id="floodHighestRiskCounty">--</strong>
+                </div>
+                <div class="drought-summary-card">
+                    <span>⚡ Flash Flood Watch Counties (hot + bare soil)</span>
+                    <strong id="floodFlashWatch">--</strong>
+                </div>
+                <div class="drought-summary-card">
+                    <span>🌐 El Niño Monitoring</span>
+                    <strong>Reference dataset (live ENSO index integration planned)</strong>
+                </div>
+            </div>
+        </section>
+
+        <!-- GEOSHIELD DROUGHT ENGINE PAGE -->
+        <section id="geoshieldDroughtPage" class="geoshield-workspace-page geoshield-drought-page">
+            <div class="livemap-header">
+                <div>
+                    <h2>🌾 Drought Engine -- VIIRS / GPM / ERA5</h2>
+                    <p id="droughtSceneInfo">Loading drought intelligence...</p>
+                </div>
+                <div class="livemap-controls">
+                    <input type="text" id="droughtSearchInput" placeholder="Search a location...">
+                    <label><input type="radio" name="droughtMapView" value="satellite" checked> Satellite</label>
+                    <label><input type="radio" name="droughtMapView" value="street"> Street</label>
+                    <button type="button" id="droughtCloseBtn" class="livemap-close-btn" title="Return to Main Map">✕</button>
+                </div>
+            </div>
+            <div id="droughtMap" class="livemap-container"></div>
+            <div id="droughtSummaryPanel" class="drought-summary-panel">
+                <div class="drought-summary-card" style="display:flex; gap:12px; align-items:center;">
+                    <span>🚨 Drought risk:</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;background:#00b894;"></span> Low (&lt;30%)</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;background:#f1c40f;"></span> Moderate (30-49%)</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;background:#e67e22;"></span> High (50-69%)</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;background:#e74c3c;"></span> Severe (&ge;70%)</span>
+                </div>
+                <div class="drought-summary-card">
+                    <span>🔥 Live VIIRS Hotspots (Kenya-wide)</span>
+                    <strong id="droughtHotspotCount">--</strong>
+                </div>
+                <div class="drought-summary-card">
+                    <span>🚨 Highest Drought Risk County</span>
+                    <strong id="droughtHighestRiskCounty">--</strong>
+                </div>
+                <div class="drought-summary-card">
+                    <span>🌧️ GPM Precipitation / ERA5 Climate</span>
+                    <strong id="droughtDataNote">Reference dataset (live GPM/ERA5 integration planned)</strong>
+                </div>
+            </div>
+        </section>
+
         <section id="geoshieldIntelligencePage" class="geoshield-workspace-page geoshield-intelligence-page">
             <section id="satelliteCenter" class="satellite-center">
                 <div class="satellite-center-header">
@@ -210,8 +306,23 @@
 <script src="/static/legend.js"></script>
 <script src="/static/satellites.js?v=1788364370"></script>
 <script src="/static/sentinel2.js"></script>
+<script src="/static/live-map.js"></script>
+<script src="/static/drought.js"></script>
+<script src="/static/flood.js"></script>
 <script src="/static/workspace-nav.js"></script>
 <script src="/static/map-layout-lock.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+

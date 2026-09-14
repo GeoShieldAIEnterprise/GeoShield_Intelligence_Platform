@@ -1,4 +1,4 @@
-import pandas as pd
+﻿import pandas as pd
 
 DATA = "dashboard/data/county_master_intelligence.csv"
 
@@ -28,6 +28,11 @@ def dashboard_summary():
                 ascending=False
             ).iloc[0].to_dict()
     }
+
+
+def all_counties():
+
+    return df.to_dict("records")
 
 
 def county(name):

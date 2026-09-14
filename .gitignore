@@ -74,3 +74,13 @@ database/*.db
 *.ovr
 *.aux.xml
 desktop.ini
+
+*.bak*
+_scratch_scripts/
+__pycache__/
+*.pyc
+
+*.bak*
+_scratch_scripts/
+__pycache__/
+*.pyc

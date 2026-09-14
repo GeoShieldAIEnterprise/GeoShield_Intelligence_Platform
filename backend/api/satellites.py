@@ -15,7 +15,7 @@ from backend.satellite.registry import (
 
 
 router = APIRouter(
-    prefix="/satellites",
+    prefix="/api/satellites",
     tags=["Satellites"],
 )
 
@@ -69,3 +69,4 @@ def satellite(satellite_id: str):
         "status": "success",
         "satellite": result,
     }
+

@@ -55,15 +55,60 @@
             html += "<div style=" + q + "color:#38bdf8; font-size:11px; font-weight:bold; margin-bottom:8px; text-transform:uppercase;" + q + ">" + s.category + "</div>";
             html += "<p style=" + q + "color:#94a3b8; font-size:13px; line-height:1.4; margin-bottom:16px;" + q + ">" + s.description + "</p>";
             html += "<div style=" + q + "margin-bottom:16px;" + q + ">" + capsHtml + "</div>";
+            const cadenceHtml = s.update_cadence ? "<div style=" + q + "color:#64748b; font-size:11px; margin-bottom:8px;" + q + ">Updates: " + s.update_cadence + "</div>" : "";
+            const howHtml = s.how_it_works ? "<p style=" + q + "color:#64748b; font-size:12px; line-height:1.4; margin-bottom:12px; font-style:italic;" + q + ">" + s.how_it_works + "</p>" : "";
+            const linkHtml = s.external_url ? "<a href=" + q + s.external_url + q + " target=" + q + "_blank" + q + " style=" + q + "color:#38bdf8; font-size:11px; display:inline-block; margin-bottom:12px;" + q + ">View official source &rarr;</a><br>" : "";
+
+            let healthHtml = "";
+            if (s.live_health !== undefined) {
+                const lh = s.live_health;
+                const hColor = !lh ? "#475569" : (lh.mode === "live" ? "#10b981" : "#f59e0b");
+                const hLabel = !lh ? "Not yet checked" : (lh.mode === "live" ? "Live" : "Fallback (mock)");
+                const hDetail = lh ? (lh.summary + " &middot; checked " + new Date(lh.checked_at).toLocaleTimeString()) : "No data pulled yet this session";
+                healthHtml = "<div style=" + q + "display:flex; align-items:center; gap:6px; margin-bottom:10px; padding:6px 8px; background:#0b1220; border-radius:4px;" + q + ">" +
+                    "<span style=" + q + "width:8px; height:8px; border-radius:50%; background:" + hColor + "; display:inline-block;" + q + "></span>" +
+                    "<span style=" + q + "color:#e2e8f0; font-size:11px; font-weight:600;" + q + ">" + hLabel + "</span>" +
+                    "<span style=" + q + "color:#64748b; font-size:11px;" + q + ">" + hDetail + "</span>" +
+                "</div>";
+            }
+
+            html += cadenceHtml + howHtml + linkHtml + healthHtml;
             html += isActive ? "<button type=" + q + "button" + q + " class=" + q + "satellite-open-btn" + q + " data-satellite-id=" + q + s.id + q + " style=" + q + "width:100%; padding:10px; background:#2563eb; color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:600;" + q + ">Open Satellite</button>" : "<button type=" + q + "button" + q + " disabled style=" + q + "width:100%; padding:10px; background:#1e293b; color:#64748b; border:none; border-radius:6px; cursor:not-allowed;" + q + ">Coming Soon</button>";
             html += "</div>";
             return html;
         }).join("");
     }
 
-    if (document.readyState === "loading") {
+        function wireOpenSatelliteButtons() {
+        const grid = document.getElementById("satelliteGrid");
+        if (!grid || grid.dataset.openWired === "true") return;
+
+        grid.addEventListener("click", function (event) {
+            const btn = event.target.closest(".satellite-open-btn");
+            if (!btn) return;
+
+            const id = btn.getAttribute("data-satellite-id");
+
+            if (id === "sentinel2" && window.GeoShieldWorkspace) {
+                window.GeoShieldWorkspace.goToLiveMap();
+            } else if (id === "viirs" && window.GeoShieldWorkspace) {
+                window.GeoShieldWorkspace.goToDrought();
+            } else if (id === "gpm" && window.GeoShieldWorkspace) {
+                window.GeoShieldWorkspace.goToFlood();
+            } else {
+                console.warn("GeoShield: no destination wired for satellite:", id);
+            }
+        });
+
+        grid.dataset.openWired = "true";
+    }
+
+if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", loadSatellites);
     } else {
         loadSatellites();
     }
+
+    wireOpenSatelliteButtons();
 })();
+
