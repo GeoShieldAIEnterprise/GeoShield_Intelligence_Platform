@@ -91,10 +91,14 @@
 
             if (id === "sentinel2" && window.GeoShieldWorkspace) {
                 window.GeoShieldWorkspace.goToLiveMap();
+            } else if (id === "sentinel1" && window.GeoShieldWorkspace) {
+                window.GeoShieldWorkspace.goToFlood();
             } else if (id === "viirs" && window.GeoShieldWorkspace) {
                 window.GeoShieldWorkspace.goToDrought();
             } else if (id === "gpm" && window.GeoShieldWorkspace) {
                 window.GeoShieldWorkspace.goToFlood();
+            } else if (id === "era5" && window.GeoShieldWorkspace) {
+                window.GeoShieldWorkspace.goToDrought();
             } else {
                 console.warn("GeoShield: no destination wired for satellite:", id);
             }
@@ -111,4 +115,6 @@ if (document.readyState === "loading") {
 
     wireOpenSatelliteButtons();
 })();
+
+
 

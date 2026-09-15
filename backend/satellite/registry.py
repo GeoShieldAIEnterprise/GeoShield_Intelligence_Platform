@@ -54,7 +54,7 @@ SATELLITE_REGISTRY: dict[str, dict[str, Any]] = {
         "name": "Sentinel-1",
         "provider": "Copernicus Data Space",
         "category": "SAR Radar",
-        "status": "planned",
+        "status": "active",
         "description": (
             "Synthetic Aperture Radar imagery for "
             "flood mapping, surface monitoring and "

@@ -78,15 +78,18 @@ window.GeoShieldFlood = {
 
     async loadCountyFloodLayer() {
         try {
-            const [geoRes, countiesRes, gpmRes] = await Promise.all([
+            const [geoRes, countiesRes, gpmRes, era5Res] = await Promise.all([
                 fetch("/static/data/kenya_counties.geojson"),
                 fetch("/counties"),
-                fetch("/api/main-engine/gpm-rainfall")
+                fetch("/api/main-engine/gpm-rainfall"),
+                fetch("/api/main-engine/era5-weather")
             ]);
             const data = await geoRes.json();
             const countiesList = await countiesRes.json();
             const gpmData = await gpmRes.json();
             const gpmCounties = gpmData.counties || {};
+            const era5Data = await era5Res.json();
+            const era5Counties = era5Data.counties || {};
 
             const countyLookup = {};
             countiesList.forEach(c => { countyLookup[c.County] = c; });
@@ -144,7 +147,8 @@ window.GeoShieldFlood = {
                                 🌿 NDVI: ${Number(info.NDVI).toFixed(2)}<br>
                                 🌊 Flood Risk: ${risk}<br>
                                 ⚡ Flash Flood Watch: ${flash}<br>
-                                \ud83c\udf27\ufe0f Today's rainfall (GPM live): ${gpmCounties[county] !== undefined ? gpmCounties[county] + " mm" : "unavailable"}
+                                \ud83c\udf27\ufe0f Today's rainfall (GPM live): ${gpmCounties[county] !== undefined ? gpmCounties[county] + " mm" : "unavailable"}<br>
+                                \ud83c\udf21\ufe0f Temperature (ERA5 live): ${era5Counties[county] !== undefined ? era5Counties[county].temperature_c + " \u00b0C" : "unavailable"}
                             `).openPopup();
 
                             this.map.fitBounds(layer.getBounds(), { padding: [20, 20], maxZoom: 9 });
