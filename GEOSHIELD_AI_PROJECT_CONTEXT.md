@@ -1243,3 +1243,96 @@ The next AI should:
 10. Maintain the separation between data acquisition, services, intelligence engines, AI/risk, alerts, reports, analytics and the UI.
 11. Keep humans responsible for final decisions; GeoShield provides intelligence and decision support.
 
+
+## Agriculture Engine — Current Status & Temporary Blockers
+
+### Completed
+
+The Agriculture Engine backend is fully working and has been independently verified.
+
+- RiskEngine.calculate_agriculture_risk() calculates drought/crop-stress risk using rainfall, temperature, and humidity.
+- DecisionEngine.recommend_agriculture() generates action recommendations according to risk severity.
+- ackend\disaster\agriculture_engine.py retrieves live GPM rainfall and ERA5 weather data through the Main Engine, processes all 47 Kenyan counties, and returns ranked agriculture-risk data.
+- ackend\api\agriculture_api.py exposes:
+  - /api/agriculture/live
+  - /api/agriculture/summary
+- Standalone verification succeeded:
+  - 47 counties processed.
+  - Real live data returned.
+  - Risk summary returned with risk level High.
+
+### Frontend Status
+
+The Agriculture interface is structurally wired and rendering correctly.
+
+- Sidebar Agriculture navigation has a real ID and click handler.
+- Clicking Agriculture switches to the dedicated Agriculture page.
+- Agriculture header, close button, and summary panel render correctly.
+- gricultureengine.js is created and loading.
+
+### Temporary Blockers
+
+These are temporary integration/environment blockers and must NOT be interpreted as failures of the Agriculture Engine itself.
+
+#### Agriculture API Feed
+
+The browser currently reports:
+
+Unable to reach agriculture feed
+
+The frontend is attempting:
+
+/api/agriculture/live
+
+The Agriculture Engine backend has already been independently verified. The browser error is therefore currently treated as an application/server integration issue.
+
+The most likely causes are:
+
+- Uvicorn is not running.
+- ackend.main fails during application startup.
+- A full-application dependency prevents the API server from booting.
+
+#### Missing Roads Dataset
+
+The following file is currently missing:
+
+data\roads\ken_roads.shp
+
+This is required by the full application because existing Earthquake/Fire functionality references the roads layer during application startup.
+
+Previous download attempts failed:
+
+- ICPAC source unavailable.
+- UC Davis DIVA-GIS source unavailable.
+
+This is a full-application startup dependency and is NOT an Agriculture Engine calculation problem.
+
+Do not rebuild or redesign the Agriculture Engine to compensate for this missing dataset.
+
+#### Sidebar Character Encoding
+
+Pre-existing mojibake/mangled characters appear throughout the sidebar, including strings similar to:
+
+ðŸŒ¿
+
+and
+
+ðŸ...
+
+This is a general frontend encoding issue and is not specific to Agriculture.
+
+### Development Rule
+
+Keep this section temporarily while Agriculture Engine development and integration are still in progress.
+
+After the Agriculture Engine is completely finished, integrated into the full GeoShield application, tested, and confirmed working, remove this entire temporary blocker section from this project context file.
+
+Until then:
+
+- Preserve the completed Agriculture Engine implementation.
+- Do not unnecessarily rebuild working Agriculture backend logic.
+- Do not confuse application startup problems with Agriculture Engine failures.
+- Continue Agriculture Engine development from the existing implementation.
+- Preserve the Main Engine architecture.
+- Do not modify Copernicus/Sentinel/backend components unless required for the Agriculture integration task.
+
