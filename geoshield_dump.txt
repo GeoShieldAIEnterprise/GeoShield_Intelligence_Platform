@@ -1,0 +1,5560 @@
+﻿===== FOLDER STRUCTURE =====
+
+===== FILES: main.py, Main Engine, Earthquake Engine =====
+
+===== maps\map_engine.py =====
+
+
+import folium
+
+def create_map():
+
+    kenya = folium.Map(
+        location=[0.3, 37.8],
+        zoom_start=6,
+        tiles="CartoDB positron",
+        control_scale=True
+    )
+
+    folium.LayerControl().add_to(kenya)
+
+    return kenya
+
+
+===== core\indices\spectral_engine.py =====
+
+"""
+GeoShield Spectral Analysis Engine
+
+Calculates and classifies multiple spectral
+indices from one satellite observation.
+"""
+
+from .ndvi import calculate_ndvi
+from .ndwi import calculate_ndwi
+from .ndbi import calculate_ndbi
+from .savi import calculate_savi
+
+from .classifier import (
+    classify_ndvi,
+    classify_ndwi,
+    classify_ndbi,
+    classify_savi,
+)
+
+from .spectral_input import SpectralInput
+from .spectral_report import SpectralReport
+
+
+class SpectralEngine:
+
+    def analyze(self, data: SpectralInput) -> SpectralReport:
+        """
+        Calculate and classify all supported indices.
+        """
+
+        ndvi = calculate_ndvi(
+            data.red,
+            data.nir,
+        )
+
+        ndwi = calculate_ndwi(
+            data.green,
+            data.nir,
+        )
+
+        ndbi = calculate_ndbi(
+            data.swir,
+            data.nir,
+        )
+
+        savi = calculate_savi(
+            data.red,
+            data.nir,
+        )
+
+        return SpectralReport(
+            values={
+                "NDVI": ndvi,
+                "NDWI": ndwi,
+                "NDBI": ndbi,
+                "SAVI": savi,
+            },
+            classifications={
+                "NDVI": classify_ndvi(ndvi).classification,
+                "NDWI": classify_ndwi(ndwi).classification,
+                "NDBI": classify_ndbi(ndbi).classification,
+                "SAVI": classify_savi(savi).classification,
+            },
+        )
+
+===== core\indices\environmental_engine.py =====
+
+"""
+GeoShield Environmental Analysis Engine
+
+Combines environmental indices and produces:
+
+- environmental classifications
+- environmental score
+- environmental intelligence report
+"""
+
+from core.indices.classification import classify_environment
+from core.indices.environmental_score import calculate_environmental_score
+from core.indices.environmental_report import generate_environmental_report
+
+
+class EnvironmentalEngine:
+
+    def analyze(
+        self,
+        ndvi: float,
+        ndbi: float,
+        ndwi: float,
+        savi: float,
+        evi: float | None = None,
+    ) -> dict:
+        """
+        Analyze environmental conditions using
+        satellite-derived environmental indices.
+        """
+
+        classifications = classify_environment(
+            ndvi=ndvi,
+            ndbi=ndbi,
+            ndwi=ndwi,
+            savi=savi,
+        )
+
+        score = calculate_environmental_score(
+            ndvi=ndvi,
+            ndbi=ndbi,
+            ndwi=ndwi,
+            savi=savi,
+            evi=evi,
+        )
+
+        report = generate_environmental_report(
+            ndvi=ndvi,
+            ndwi=ndwi,
+            ndbi=ndbi,
+            savi=savi,
+            evi=evi,
+        )
+
+        return {
+            "indices": {
+                "ndvi": ndvi,
+                "ndbi": ndbi,
+                "ndwi": ndwi,
+                "savi": savi,
+                "evi": evi,
+            },
+            "classifications": classifications,
+            "environmental_score": score,
+            "report": report,
+        }
+
+===== core\hazards\hazard_engine.py =====
+
+"""
+GeoShield Hazard Intelligence Engine.
+
+Combines hazard detection, classification, severity,
+and risk assessment into a single analysis pipeline.
+"""
+
+from core.hazards.detector import HazardDetector
+from core.hazards.classifier import HazardClassifier
+from core.hazards.severity import HazardSeverity
+from core.hazards.risk import HazardRisk
+
+
+class HazardEngine:
+    """
+    Main hazard intelligence engine.
+    """
+
+    def __init__(self):
+        self.detector = HazardDetector()
+        self.classifier = HazardClassifier()
+        self.severity = HazardSeverity()
+        self.risk = HazardRisk()
+
+    def analyze(
+        self,
+        ndvi: float,
+        ndwi: float,
+        ndbi: float,
+        savi: float,
+        environmental_score: float,
+    ) -> dict:
+        """
+        Analyze environmental conditions for potential hazards.
+        """
+
+        hazards = self.detector.detect(
+            ndvi=ndvi,
+            ndwi=ndwi,
+            ndbi=ndbi,
+            savi=savi,
+        )
+
+        classifications = self.classifier.classify(
+            hazards
+        )
+
+        hazard_results = {}
+
+        for hazard in hazards:
+
+            risk_score = self.risk.calculate(
+                hazard=hazard,
+                environmental_score=environmental_score,
+            )
+
+            severity = self.severity.calculate(
+                hazard=hazard,
+                score=risk_score,
+            )
+
+            hazard_results[hazard] = {
+                "risk_score": risk_score,
+                "severity": severity,
+                "classification": classifications[hazard],
+            }
+
+        return {
+            "hazards": hazards,
+            "classifications": classifications,
+            "hazard_results": hazard_results,
+            "environmental_score": environmental_score,
+        }
+
+===== core\engines\main_engine.py =====
+
+"""
+GeoShield AI Enterprise -- Main Engine
+Single point of coordination for the entire platform.
+"""
+from __future__ import annotations
+import sqlite3
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+from core.auth.copernicus import CopernicusAuthManager
+from core.auth.exceptions import (
+    CopernicusAuthenticationError,
+    CopernicusConfigurationError,
+    CopernicusNetworkError,
+)
+from core.connectors.connector_registry import ConnectorRegistry
+from core.connectors.firms_connector import build_firms_connector
+from core.connectors.gpm_connector import build_gpm_connector
+from core.connectors.era5_connector import build_era5_connector
+
+_auth_manager = CopernicusAuthManager()
+DB_PATH = Path("database/geoshield.db")
+SENTINELHUB_WMS_BASE = "https://sh.dataspace.copernicus.eu/ogc/wms/dc50e71d-6b64-4439-84ef-2e704e48f6f5"
+
+def _build_connector_registry() -> ConnectorRegistry:
+    registry = ConnectorRegistry()
+    registry.register(build_firms_connector())
+    registry.register(build_gpm_connector())
+    registry.register(build_era5_connector())
+    return registry
+
+
+_connector_registry = _build_connector_registry()
+
+
+class MainEngine:
+    """Central coordination point for all GeoShield AI subsystems and satellite feeds."""
+
+    def __init__(self):
+        self.registered_engines = {}
+        self.connectors = _connector_registry
+        self._last_status: dict[str, dict] = {}
+
+    def register_engine(self, name: str, engine_instance: Any):
+        self.registered_engines[name] = engine_instance
+
+    def get_live_tile_layer(self, layer: str = "TRUE-COLOR-S2L2A") -> dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        try:
+            token = _auth_manager.get_token()
+        except (CopernicusAuthenticationError, CopernicusConfigurationError, CopernicusNetworkError) as exc:
+            print(f"[MainEngine] Copernicus auth failed: {exc!r}")
+            token = None
+        
+        if token:
+            return {
+                "mode": "live",
+                "kind": "wms",
+                "tile_url_template": f"{SENTINELHUB_WMS_BASE}?access_token={token}",
+                "wms_layer": layer,
+                "checked_at": now,
+            }
+        return {
+            "mode": "mock",
+            "kind": "xyz",
+            "tile_url_template": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+            "wms_layer": None,
+            "checked_at": now,
+        }
+
+    def get_resources(self, county: str | None = None) -> list[dict[str, Any]]:
+        if not DB_PATH.exists():
+            return []
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        if county:
+            cursor.execute(
+                "SELECT name, category, county, latitude, longitude, status, capacity, contact "
+                "FROM infrastructure WHERE county = ?",
+                (county,),
+            )
+        else:
+            cursor.execute(
+                "SELECT name, category, county, latitude, longitude, status, capacity, contact "
+                "FROM infrastructure"
+            )
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+
+    def get_system_status(self) -> dict[str, Any]:
+        tile_status = self.get_live_tile_layer()
+        return {
+            "status": "healthy",
+            "sentinel2_mode": tile_status["mode"],
+            "active_engines": list(self.registered_engines.keys()),
+            "resources_available": DB_PATH.exists(),
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def get_viirs_hotspots(self, day_range: int = 1) -> dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        connector = self.connectors.get("VIIRS-FIRMS")
+
+        if connector is None or not connector.is_enabled():
+            result = {
+                "mode": "mock",
+                "provider": "VIIRS-FIRMS",
+                "hotspots": [],
+                "count": 0,
+                "checked_at": now,
+            }
+            self._last_status["viirs"] = result
+            return result
+
+        result_obj = connector.search(day_range=day_range)
+
+        if not result_obj.success:
+            print(f"[MainEngine] FIRMS search failed: {result_obj.error}")
+            result = {
+                "mode": "mock",
+                "provider": "VIIRS-FIRMS",
+                "hotspots": [],
+                "count": 0,
+                "error": result_obj.error,
+                "checked_at": now,
+            }
+            self._last_status["viirs"] = result
+            return result
+
+        result = {
+            "mode": "live",
+            "provider": "VIIRS-FIRMS",
+            "hotspots": result_obj.data,
+            "count": result_obj.metadata.get("count", len(result_obj.data)),
+            "checked_at": now,
+        }
+        self._last_status["viirs"] = result
+        return result
+
+    def get_gpm_rainfall(self) -> dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        connector = self.connectors.get("GPM-IMERG")
+
+        if connector is None or not connector.is_enabled():
+            result = {
+                "mode": "mock",
+                "provider": "GPM-IMERG",
+                "counties": {},
+                "checked_at": now,
+            }
+            self._last_status["gpm"] = result
+            return result
+
+        result_obj = connector.search()
+
+        if not result_obj.success:
+            print(f"[MainEngine] GPM search failed: {result_obj.error}")
+            result = {
+                "mode": "mock",
+                "provider": "GPM-IMERG",
+                "counties": {},
+                "error": result_obj.error,
+                "checked_at": now,
+            }
+            self._last_status["gpm"] = result
+            return result
+
+        result = {
+            "mode": "live",
+            "provider": "GPM-IMERG",
+            "counties": result_obj.data,
+            "cached": result_obj.metadata.get("cached", False),
+            "checked_at": now,
+        }
+        self._last_status["gpm"] = result
+        return result
+
+    def get_era5_weather(self) -> dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        connector = self.connectors.get("ERA5-OpenMeteo")
+
+        if connector is None or not connector.is_enabled():
+            result = {
+                "mode": "mock",
+                "provider": "ERA5-OpenMeteo",
+                "counties": {},
+                "checked_at": now,
+            }
+            self._last_status["era5"] = result
+            return result
+
+        result_obj = connector.search()
+
+        if not result_obj.success:
+            print(f"[MainEngine] ERA5/Open-Meteo search failed: {result_obj.error}")
+            result = {
+                "mode": "mock",
+                "provider": "ERA5-OpenMeteo",
+                "counties": {},
+                "error": result_obj.error,
+                "checked_at": now,
+            }
+            self._last_status["era5"] = result
+            return result
+
+        result = {
+            "mode": "live",
+            "provider": "ERA5-OpenMeteo",
+            "counties": result_obj.data,
+            "cached": result_obj.metadata.get("cached", False),
+            "checked_at": now,
+        }
+        self._last_status["era5"] = result
+        return result
+
+    def get_satellite_live_status(self, satellite_id: str) -> dict[str, Any] | None:
+        """Return the last-known live status for a satellite without triggering a fresh call."""
+        return self._last_status.get(satellite_id)
+
+    def get_hazard_summary(self, hazard: str, county: str | None = None) -> dict[str, Any]:
+        if hazard in self.registered_engines:
+            return self.registered_engines[hazard].get_summary(county=county)
+        
+        # Default mock structure mapped to satellite telemetry sources requested
+        sources_map = {
+            "drought": ["VIIRS", "GPM", "ERA5"],
+            "fire": ["VIIRS", "ERA5", "Sentinel-2"],
+            "earthquake": ["Seismic-Array", "ERA5"],
+            "agriculture": ["VIIRS", "GPM", "ERA5", "Sentinel-2"],
+            "flood": ["VIIRS", "GPM", "ERA5"]
+        }
+        return {
+            "hazard": hazard,
+            "county": county or "All 47 Counties",
+            "status": "monitored",
+            "satellites": sources_map.get(hazard, ["Sentinel-2"]),
+            "risk_level": "Moderate",
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+
+main_engine = MainEngine()
+
+
+
+===== core\notification_engine.py =====
+
+
+===== core\risk_engine.py =====
+
+class RiskEngine:
+
+    def calculate_fire_risk(self, fire):
+
+        score = 0
+
+        # Brightness
+        if fire["brightness"] >= 360:
+            score += 40
+        elif fire["brightness"] >= 340:
+            score += 30
+        else:
+            score += 20
+
+        # Fire Radiative Power
+        if fire["frp"] >= 10:
+            score += 30
+        elif fire["frp"] >= 5:
+            score += 20
+        else:
+            score += 10
+
+        # Confidence
+        confidence = fire["confidence"].lower()
+
+        if confidence == "h":
+            score += 30
+        elif confidence == "n":
+            score += 20
+        else:
+            score += 10
+
+        # Severity Classification
+        if score >= 90:
+            severity = "Extreme"
+
+        elif score >= 70:
+            severity = "High"
+
+        elif score >= 50:
+            severity = "Moderate"
+
+        else:
+            severity = "Low"
+
+        return {
+
+            "risk_score": score,
+
+            "severity": severity
+
+        }
+
+===== core\decision_engine.py =====
+
+class DecisionEngine:
+
+    def __init__(self):
+        pass
+
+    def recommend(self, event):
+
+        severity = event["severity"]
+
+        actions = []
+
+        if severity == "Low":
+
+            actions = [
+
+                "Monitor situation",
+
+                "Log event"
+
+            ]
+
+        elif severity == "Moderate":
+
+            actions = [
+
+                "Notify County Disaster Office",
+
+                "Notify Fire Department",
+
+                "Increase Monitoring"
+
+            ]
+
+        elif severity == "High":
+
+            actions = [
+
+                "Dispatch Fire Brigade",
+
+                "Notify NDMA",
+
+                "Notify Police",
+
+                "Prepare Evacuation Teams"
+
+            ]
+
+        elif severity == "Extreme":
+
+            actions = [
+
+                "Dispatch Fire Brigade Immediately",
+
+                "Notify National Disaster Operations Centre",
+
+                "Deploy Aerial Surveillance",
+
+                "Issue Public Warning",
+
+                "Prepare Medical Response",
+
+                "Prepare Evacuation"
+
+            ]
+
+        return {
+
+            "recommended_actions": actions
+
+        }
+
+===== core\workflow_engine.py =====
+
+from core.event_enrichment import EventEnrichmentEngine
+from core.risk_engine import RiskEngine
+from core.decision_engine import DecisionEngine
+
+
+class WorkflowEngine:
+
+    def __init__(self, data_manager):
+
+        self.enrichment = EventEnrichmentEngine(data_manager)
+        self.risk = RiskEngine()
+        self.decision = DecisionEngine()
+
+    def process(self, event):
+
+        # STEP 1
+        location = self.enrichment.enrich(
+            event["longitude"],
+            event["latitude"]
+        )
+
+        # STEP 2
+        event.update(location)
+
+        # STEP 3
+        risk = self.risk.calculate_fire_risk(event)
+
+        event.update(risk)
+
+        # STEP 4
+        decision = self.decision.recommend(event)
+
+        event.update(decision)
+
+        return event
+
+===== core\engine_registry.py =====
+
+"""
+GeoShield Intelligence Platform
+
+Enterprise Engine Registry
+
+Author:
+David Omondi Ouma
+Founder & Chief Executive Officer (CEO)
+"""
+
+
+class EngineRegistry:
+    """
+    Stores and manages all intelligence engines
+    available within the GeoShield Platform.
+    """
+
+    def __init__(self):
+        self._engines = {}
+
+    def register(self, name, engine):
+
+        self._engines[name] = engine
+
+    def get(self, name):
+
+        return self._engines.get(name)
+
+    def exists(self, name):
+
+        return name in self._engines
+
+    def list_engines(self):
+
+        return list(self._engines.keys())
+
+===== engines\environment\__init__.py =====
+
+
+===== engines\environment\environment_engine.py =====
+
+
+===== engines\hazard\__init__.py =====
+
+
+===== engines\hazard\hazard_engine.py =====
+
+
+===== engines\infrastructure\infrastructure_engine.py =====
+
+
+===== engines\infrastructure\engine.py =====
+
+
+class InfrastructureEngine:
+
+    def __init__(self):
+
+        self.layers={}
+
+    def register(self,name,data):
+
+        self.layers[name]=data
+
+    def available_layers(self):
+
+        return list(self.layers.keys())
+
+
+
+===== engines\infrastructure\__init__.py =====
+
+from .engine import InfrastructureEngine
+
+===== engines\population\__init__.py =====
+
+
+===== engines\population\population_engine.py =====
+
+
+===== engines\decision\__init__.py =====
+
+
+===== engines\decision\decision_engine.py =====
+
+
+===== engines\alerts\__init__.py =====
+
+
+===== engines\alerts\alert_engine.py =====
+
+
+===== engines\fire\__init__.py =====
+
+
+===== engines\flood\__init__.py =====
+
+
+===== engines\temperature\__init__.py =====
+
+
+===== engines\osm\engine.py =====
+
+
+class OSMEngine:
+
+    def __init__(self):
+
+        self.categories={}
+
+    def register(self,name):
+
+        self.categories[name]=[]
+
+    def available(self):
+
+        return list(self.categories.keys())
+
+
+
+===== engines\osm\downloader.py =====
+
+
+import os
+import osmnx as ox
+
+class InfrastructureDownloader:
+
+    def __init__(self,database):
+
+        self.database=database
+
+
+
+===== engines\osm\__init__.py =====
+
+from .engine import OSMEngine
+from .downloader import InfrastructureDownloader
+
+
+===== engines\sentinel2\sentinel2_ndvi_processor.py =====
+
+import os
+import glob
+import numpy as np
+import rasterio
+from rasterio.warp import reproject, Resampling
+
+# ============================================================
+# GEOSHIELD SENTINEL-2 TRUE NDVI PROCESSOR
+# B04 = Red
+# B08 = Near Infrared
+# SCL = Scene Classification Layer
+# ============================================================
+
+SAFE_ROOT = r"data/sentinel2/S2A_MSIL2A_20260812T074031_N0512_R092_T37MBU_20260812T125812.SAFE"
+OUTPUT_DIR = r"data/ndvi"
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+
+def find_band(pattern):
+    matches = glob.glob(
+        os.path.join(SAFE_ROOT, "**", pattern),
+        recursive=True
+    )
+
+    if not matches:
+        raise FileNotFoundError(
+            f"Could not find Sentinel-2 asset: {pattern}"
+        )
+
+    return matches[0]
+
+
+def read_band(path):
+    with rasterio.open(path) as src:
+        data = src.read(1).astype(np.float32)
+        profile = src.profile.copy()
+        transform = src.transform
+        crs = src.crs
+        nodata = src.nodata
+
+    return data, profile, transform, crs, nodata
+
+
+def resample_to_reference(
+    source_path,
+    reference_profile,
+    reference_transform,
+    reference_crs,
+):
+    with rasterio.open(source_path) as src:
+        destination = np.zeros(
+            (
+                reference_profile["height"],
+                reference_profile["width"],
+            ),
+            dtype=np.uint8,
+        )
+
+        reproject(
+            source=src.read(1),
+            destination=destination,
+            src_transform=src.transform,
+            src_crs=src.crs,
+            dst_transform=reference_transform,
+            dst_crs=reference_crs,
+            resampling=Resampling.nearest,
+        )
+
+    return destination
+
+
+print("===== GEOSHIELD SENTINEL-2 TRUE NDVI PROCESSOR =====")
+
+b04_path = find_band("*B04_10m.jp2")
+b08_path = find_band("*B08_10m.jp2")
+scl_path = find_band("*SCL_20m.jp2")
+
+print()
+print("B04:", b04_path)
+print("B08:", b08_path)
+print("SCL:", scl_path)
+
+red, profile, transform, crs, _ = read_band(b04_path)
+nir, _, _, _, _ = read_band(b08_path)
+
+if red.shape != nir.shape:
+    raise RuntimeError(
+        f"B04/B08 dimensions differ: {red.shape} vs {nir.shape}"
+    )
+
+print()
+print("B04 shape:", red.shape)
+print("B08 shape:", nir.shape)
+print("CRS:", crs)
+print("Resolution:", profile["transform"].a, profile["transform"].e)
+
+# ------------------------------------------------------------
+# Sentinel-2 SCL classes that are considered invalid
+#
+# 0  No data
+# 1  Saturated / defective
+# 3  Cloud shadow
+# 8  Cloud medium probability
+# 9  Cloud high probability
+# 10 Thin cirrus
+# 11 Snow / ice
+# ------------------------------------------------------------
+
+scl = resample_to_reference(
+    scl_path,
+    profile,
+    transform,
+    crs,
+)
+
+invalid_classes = {
+    0,
+    1,
+    3,
+    8,
+    9,
+    10,
+    11,
+}
+
+quality_mask = np.ones(scl.shape, dtype=bool)
+
+for class_value in invalid_classes:
+    quality_mask &= scl != class_value
+
+# ------------------------------------------------------------
+# Sentinel-2 L2A reflectance scaling
+# ------------------------------------------------------------
+
+red = red / 10000.0
+nir = nir / 10000.0
+
+denominator = nir + red
+
+valid = (
+    quality_mask
+    & np.isfinite(red)
+    & np.isfinite(nir)
+    & (denominator != 0)
+)
+
+ndvi = np.full(
+    red.shape,
+    np.nan,
+    dtype=np.float32,
+)
+
+ndvi[valid] = (
+    (nir[valid] - red[valid])
+    / denominator[valid]
+)
+
+# Physically useful NDVI range
+ndvi[
+    (ndvi < -1.0)
+    | (ndvi > 1.0)
+] = np.nan
+
+output_path = os.path.join(
+    OUTPUT_DIR,
+    "sentinel2_20260812_T37MBU_ndvi.tif"
+)
+
+profile.update(
+    driver="GTiff",
+    dtype="float32",
+    count=1,
+    compress="deflate",
+    predictor=3,
+    nodata=np.nan,
+)
+
+with rasterio.open(output_path, "w", **profile) as dst:
+    dst.write(ndvi, 1)
+
+valid_pixels = np.isfinite(ndvi)
+
+print()
+print("===== NDVI SUMMARY =====")
+print("Valid pixels:", int(valid_pixels.sum()))
+
+if valid_pixels.any():
+    print(
+        "Mean NDVI:",
+        float(np.nanmean(ndvi))
+    )
+    print(
+        "Minimum NDVI:",
+        float(np.nanmin(ndvi))
+    )
+    print(
+        "Maximum NDVI:",
+        float(np.nanmax(ndvi))
+    )
+
+print()
+print("Output:", output_path)
+print()
+print("SENTINEL-2 TRUE NDVI PROCESSOR COMPLETE")
+
+
+===== engines\sentinel2\sentinel2_quality_mask.py =====
+
+import os
+import glob
+import numpy as np
+import rasterio
+from rasterio.warp import reproject, Resampling
+
+# ============================================================
+# GEOSHIELD SENTINEL-2 QUALITY MASK ENGINE
+# ============================================================
+
+SAFE_ROOT = r"data/sentinel2/S2A_MSIL2A_20260812T074031_N0512_R092_T37MBU_20260812T125812.SAFE"
+OUTPUT_DIR = r"data/ndvi"
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+
+def find_asset(pattern):
+    matches = glob.glob(
+        os.path.join(SAFE_ROOT, "**", pattern),
+        recursive=True,
+    )
+
+    if not matches:
+        raise FileNotFoundError(
+            f"Asset not found: {pattern}"
+        )
+
+    return matches[0]
+
+
+b04_path = find_asset("*B04_10m.jp2")
+scl_path = find_asset("*SCL_20m.jp2")
+
+print("===== GEOSHIELD SENTINEL-2 QUALITY MASK =====")
+print()
+print("Reference B04:", b04_path)
+print("SCL:", scl_path)
+
+with rasterio.open(b04_path) as reference:
+    profile = reference.profile.copy()
+    transform = reference.transform
+    crs = reference.crs
+    width = reference.width
+    height = reference.height
+
+mask = np.zeros(
+    (height, width),
+    dtype=np.uint8,
+)
+
+with rasterio.open(scl_path) as scl:
+    reproject(
+        source=scl.read(1),
+        destination=mask,
+        src_transform=scl.transform,
+        src_crs=scl.crs,
+        dst_transform=transform,
+        dst_crs=crs,
+        resampling=Resampling.nearest,
+    )
+
+# Valid SCL classes:
+#
+# 2  Dark area / shadows
+# 4  Vegetation
+# 5  Bare soil
+# 6  Water
+# 7  Unclassified
+#
+# We deliberately reject:
+# 0  No data
+# 1  Saturated / defective
+# 3  Cloud shadow
+# 8  Cloud medium probability
+# 9  Cloud high probability
+# 10 Thin cirrus
+# 11 Snow / ice
+
+invalid = np.isin(
+    mask,
+    [0, 1, 3, 8, 9, 10, 11],
+)
+
+quality = np.where(
+    invalid,
+    0,
+    1,
+).astype(np.uint8)
+
+output = os.path.join(
+    OUTPUT_DIR,
+    "sentinel2_20260812_T37MBU_quality_mask.tif",
+)
+
+profile.update(
+    driver="GTiff",
+    dtype="uint8",
+    count=1,
+    compress="deflate",
+    nodata=0,
+)
+
+with rasterio.open(output, "w", **profile) as dst:
+    dst.write(quality, 1)
+
+valid_pixels = int((quality == 1).sum())
+invalid_pixels = int((quality == 0).sum())
+
+print()
+print("===== QUALITY SUMMARY =====")
+print("Valid pixels:", valid_pixels)
+print("Invalid pixels:", invalid_pixels)
+
+total = valid_pixels + invalid_pixels
+
+if total:
+    print(
+        "Valid percentage:",
+        round(valid_pixels / total * 100, 2),
+        "%"
+    )
+
+print()
+print("Output:", output)
+print()
+print("SENTINEL-2 QUALITY MASK COMPLETE")
+
+
+===== engines\sentinel2\sentinel2_hotspot_detector.py =====
+
+import os
+import numpy as np
+import rasterio
+from rasterio.features import shapes
+from shapely.geometry import shape
+import geopandas as gpd
+
+# ============================================================
+# GEOSHIELD SENTINEL-2 HOTSPOT DETECTOR
+# ============================================================
+
+NDVI_PATH = (
+    "data/ndvi/"
+    "sentinel2_20260812_T37MBU_ndvi.tif"
+)
+
+OUTPUT_DIR = "data/ndvi"
+
+OUTPUT_PATH = (
+    OUTPUT_DIR
+    + "/sentinel2_20260812_T37MBU_hotspots.geojson"
+)
+
+# NDVI below this threshold is treated as vegetation stress.
+STRESS_THRESHOLD = 0.20
+
+# Ignore tiny fragments.
+MIN_AREA_KM2 = 0.01
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+print("===== GEOSHIELD SENTINEL-2 HOTSPOT DETECTOR =====")
+
+if not os.path.exists(NDVI_PATH):
+    raise FileNotFoundError(
+        f"NDVI raster not found: {NDVI_PATH}"
+    )
+
+with rasterio.open(NDVI_PATH) as src:
+    ndvi = src.read(1)
+    transform = src.transform
+    crs = src.crs
+
+print("Input:", NDVI_PATH)
+print("CRS:", crs)
+print("Stress threshold:", STRESS_THRESHOLD)
+
+valid = np.isfinite(ndvi)
+
+stress_mask = (
+    valid
+    & (ndvi < STRESS_THRESHOLD)
+)
+
+print()
+print("Valid NDVI pixels:", int(valid.sum()))
+print("Stress pixels:", int(stress_mask.sum()))
+
+# ------------------------------------------------------------
+# Polygonize the stress mask
+# ------------------------------------------------------------
+
+records = []
+
+for geometry, value in shapes(
+    stress_mask.astype(np.uint8),
+    mask=stress_mask,
+    transform=transform,
+):
+    if value != 1:
+        continue
+
+    polygon = shape(geometry)
+
+    if polygon.is_empty:
+        continue
+
+    area_km2 = polygon.area / 1_000_000.0
+
+    if area_km2 < MIN_AREA_KM2:
+        continue
+
+    records.append(
+        {
+            "geometry": polygon,
+            "area_km2": area_km2,
+            "stress_threshold": STRESS_THRESHOLD,
+        }
+    )
+
+print()
+print("Raw stress polygons:", len(records))
+
+if not records:
+    print()
+    print("No vegetation-stress hotspots detected.")
+    print("Try adjusting STRESS_THRESHOLD.")
+    raise SystemExit(0)
+
+gdf = gpd.GeoDataFrame(
+    records,
+    crs=crs,
+)
+
+# ------------------------------------------------------------
+# Calculate mean NDVI inside each hotspot
+# ------------------------------------------------------------
+
+mean_values = []
+
+with rasterio.open(NDVI_PATH) as src:
+
+    from rasterio.mask import mask
+
+    for geometry in gdf.geometry:
+
+        try:
+            clipped, _ = mask(
+                src,
+                [geometry],
+                crop=True,
+                nodata=np.nan,
+            )
+
+            values = clipped[0]
+
+            values = values[
+                np.isfinite(values)
+            ]
+
+            if len(values):
+                mean_values.append(
+                    float(np.mean(values))
+                )
+            else:
+                mean_values.append(np.nan)
+
+        except Exception:
+            mean_values.append(np.nan)
+
+gdf["mean_ndvi"] = mean_values
+
+# ------------------------------------------------------------
+# Severity classification
+# ------------------------------------------------------------
+
+def classify_severity(ndvi_value):
+
+    if not np.isfinite(ndvi_value):
+        return "UNKNOWN"
+
+    if ndvi_value < 0.05:
+        return "CRITICAL"
+
+    if ndvi_value < 0.15:
+        return "SEVERE"
+
+    if ndvi_value < 0.20:
+        return "MODERATE"
+
+    return "LOW"
+
+
+gdf["severity"] = gdf["mean_ndvi"].apply(
+    classify_severity
+)
+
+# Rank largest/stressed areas first.
+
+gdf = gdf.sort_values(
+    ["severity", "area_km2"],
+    ascending=[True, False],
+).reset_index(drop=True)
+
+gdf["hotspot_rank"] = (
+    np.arange(len(gdf)) + 1
+)
+
+gdf["hotspot_id"] = [
+    f"S2-{i:06d}"
+    for i in range(1, len(gdf) + 1)
+]
+
+gdf.to_file(
+    OUTPUT_PATH,
+    driver="GeoJSON",
+)
+
+print()
+print("===== HOTSPOT SUMMARY =====")
+print("Hotspots:", len(gdf))
+print(
+    "Total area km2:",
+    round(float(gdf.area_km2.sum()), 3)
+)
+print(
+    "Largest hotspot km2:",
+    round(float(gdf.area_km2.max()), 3)
+)
+
+print()
+print("===== SEVERITY DISTRIBUTION =====")
+print(
+    gdf["severity"].value_counts()
+)
+
+print()
+print("Output:", OUTPUT_PATH)
+print()
+print("SENTINEL-2 HOTSPOT DETECTOR COMPLETE")
+
+
+===== engines\sentinel2\sentinel2_resumable_downloader.py =====
+
+from __future__ import annotations
+
+import os
+import sys
+import time
+
+import httpx
+
+
+# ============================================================
+# GEOSHIELD SENTINEL-2 RESUMABLE DOWNLOADER
+# Copernicus Data Space Ecosystem
+#
+# Features:
+# - CDSE authentication
+# - Resumable HTTP downloads
+# - HTTP Range support
+# - Automatic retries
+# - Preserves partial downloads
+# - Progress reporting
+# - Safe handling of server responses
+# ============================================================
+
+
+USERNAME = os.getenv("CDSE_USERNAME")
+PASSWORD = os.getenv("CDSE_PASSWORD")
+
+CLIENT_ID = "cdse-public"
+
+TOKEN_URL = (
+    "https://identity.dataspace.copernicus.eu/"
+    "auth/realms/CDSE/protocol/openid-connect/token"
+)
+
+DOWNLOAD_URL = (
+    "https://zipper.dataspace.copernicus.eu/"
+    "odata/v1/Products"
+)
+
+OUTPUT_DIR = "data/sentinel2"
+
+# Sentinel-2 product UUID
+PRODUCT_UUID = "c11a86f5-30a9-4de1-995d-8977f7f5085b"
+
+MAX_RETRIES = 10
+CHUNK_SIZE = 4 * 1024 * 1024
+
+TIMEOUT = httpx.Timeout(
+    connect=60.0,
+    read=300.0,
+    write=60.0,
+    pool=60.0,
+)
+
+
+# ============================================================
+# AUTHENTICATION
+# ============================================================
+
+def authenticate() -> str:
+    print("===== GEOSHIELD SENTINEL-2 RESUMABLE DOWNLOADER =====")
+    print("Authenticating with Copernicus Data Space...")
+
+    if not USERNAME or not PASSWORD:
+        print()
+        print("ERROR: CDSE credentials are not set.")
+        print()
+        print('Run:')
+        print('$env:CDSE_USERNAME="your_email"')
+        print('$env:CDSE_PASSWORD="your_password"')
+        sys.exit(1)
+
+    response = httpx.post(
+        TOKEN_URL,
+        data={
+            "grant_type": "password",
+            "client_id": CLIENT_ID,
+            "username": USERNAME,
+            "password": PASSWORD,
+        },
+        timeout=60,
+    )
+
+    print("AUTH:", response.status_code)
+
+    response.raise_for_status()
+
+    token = response.json().get("access_token")
+
+    if not token:
+        print("ERROR: No access token returned.")
+        sys.exit(1)
+
+    print("TOKEN: True")
+
+    return token
+
+
+# ============================================================
+# DOWNLOAD
+# ============================================================
+
+def download_product(token: str) -> str:
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    output_file = os.path.join(
+        OUTPUT_DIR,
+        f"{PRODUCT_UUID}.zip",
+    )
+
+    url = (
+        f"{DOWNLOAD_URL}"
+        f"({PRODUCT_UUID})"
+        f"/$value"
+    )
+
+    print()
+    print("===== SENTINEL-2 DOWNLOAD =====")
+    print("UUID:", PRODUCT_UUID)
+    print("Destination:", output_file)
+
+    if os.path.exists(output_file):
+        downloaded = os.path.getsize(output_file)
+
+        print()
+        print(
+            f"Existing partial file: "
+            f"{downloaded / 1024 / 1024:.2f} MB"
+        )
+        print("Attempting to resume download...")
+    else:
+        downloaded = 0
+
+        print()
+        print("No partial file found.")
+        print("Starting new download.")
+
+    for attempt in range(1, MAX_RETRIES + 1):
+
+        print()
+        print(
+            f"===== DOWNLOAD ATTEMPT "
+            f"{attempt}/{MAX_RETRIES} ====="
+        )
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "User-Agent": "GeoShield-AI/0.1",
+        }
+
+        # Always initialize mode so Pylance and runtime
+        # can prove it has a value.
+        mode = "wb"
+
+        # ----------------------------------------------------
+        # Resume request
+        # ----------------------------------------------------
+
+        if downloaded > 0:
+            headers["Range"] = f"bytes={downloaded}-"
+
+            print(
+                f"Requesting bytes from "
+                f"{downloaded:,}..."
+            )
+
+        try:
+            with httpx.stream(
+                "GET",
+                url,
+                headers=headers,
+                timeout=TIMEOUT,
+            ) as response:
+
+                print("HTTP:", response.status_code)
+                print(
+                    "Content-Type:",
+                    response.headers.get("content-type"),
+                )
+
+                # ------------------------------------------------
+                # Determine whether the server accepted resume
+                # ------------------------------------------------
+
+                if downloaded > 0:
+
+                    if response.status_code == 206:
+                        print("Resume support: ACCEPTED")
+                        mode = "ab"
+
+                    elif response.status_code == 200:
+                        print(
+                            "WARNING: Server returned "
+                            "200 instead of 206."
+                        )
+                        print(
+                            "Restarting download from zero."
+                        )
+
+                        downloaded = 0
+                        mode = "wb"
+
+                    else:
+                        response.raise_for_status()
+
+                else:
+                    response.raise_for_status()
+                    mode = "wb"
+
+                # ------------------------------------------------
+                # Determine total size
+                # ------------------------------------------------
+
+                content_length = response.headers.get(
+                    "content-length"
+                )
+
+                total_size: int | None = None
+
+                if content_length:
+                    remaining = int(content_length)
+
+                    if response.status_code == 206:
+                        total_size = downloaded + remaining
+                    else:
+                        total_size = remaining
+
+                print()
+
+                if total_size:
+                    print(
+                        "Total size:",
+                        f"{total_size / 1024 / 1024:.2f} MB",
+                    )
+                else:
+                    print("Total size: Unknown")
+
+                # ------------------------------------------------
+                # Write data
+                # ------------------------------------------------
+
+                with open(output_file, mode) as file:
+
+                    last_report = time.time()
+
+                    for chunk in response.iter_bytes(
+                        chunk_size=CHUNK_SIZE
+                    ):
+
+                        if not chunk:
+                            continue
+
+                        file.write(chunk)
+                        downloaded += len(chunk)
+
+                        now = time.time()
+
+                        if now - last_report >= 2:
+
+                            if total_size:
+                                percent = (
+                                    downloaded
+                                    / total_size
+                                    * 100
+                                )
+
+                                print(
+                                    f"Downloaded: "
+                                    f"{downloaded / 1024 / 1024:.1f} MB "
+                                    f"/ "
+                                    f"{total_size / 1024 / 1024:.1f} MB "
+                                    f"({percent:.1f}%)"
+                                )
+                            else:
+                                print(
+                                    f"Downloaded: "
+                                    f"{downloaded / 1024 / 1024:.1f} MB"
+                                )
+
+                            last_report = now
+
+                print()
+                print(
+                    "Connection completed successfully."
+                )
+
+                # ------------------------------------------------
+                # Verify completion
+                # ------------------------------------------------
+
+                final_size = os.path.getsize(output_file)
+
+                print(
+                    "File size:",
+                    f"{final_size / 1024 / 1024:.2f} MB",
+                )
+
+                if total_size is None:
+                    print()
+                    print(
+                        "Download finished, but the server "
+                        "did not provide a total size."
+                    )
+                    print(
+                        "File preserved for verification."
+                    )
+
+                    return output_file
+
+                if final_size >= total_size:
+                    print()
+                    print("DOWNLOAD COMPLETE.")
+
+                    return output_file
+
+                print()
+                print("Download incomplete.")
+                print("Will resume...")
+
+                downloaded = final_size
+
+        except (
+            httpx.ReadTimeout,
+            httpx.ConnectTimeout,
+            httpx.NetworkError,
+            httpx.RemoteProtocolError,
+        ) as error:
+
+            print()
+            print("NETWORK ERROR:")
+            print(error)
+
+            if os.path.exists(output_file):
+                downloaded = os.path.getsize(output_file)
+
+                print()
+                print("Partial file preserved:")
+                print(
+                    f"{downloaded / 1024 / 1024:.2f} MB"
+                )
+
+            if attempt < MAX_RETRIES:
+
+                wait_time = min(attempt * 10, 60)
+
+                print(
+                    f"Retrying in "
+                    f"{wait_time} seconds..."
+                )
+
+                time.sleep(wait_time)
+
+            else:
+                print()
+                print("Maximum retries reached.")
+                sys.exit(1)
+
+        except httpx.HTTPStatusError as error:
+
+            print()
+            print("HTTP ERROR:")
+            print(error)
+
+            if hasattr(error, "response"):
+                print(
+                    "HTTP status:",
+                    error.response.status_code,
+                )
+
+                print(
+                    "Response:",
+                    error.response.text[:1000],
+                )
+
+            sys.exit(1)
+
+        except Exception as error:
+
+            print()
+            print("UNEXPECTED ERROR:")
+            print("Error type:", type(error).__name__)
+            print("Error:", error)
+
+            sys.exit(1)
+
+    return output_file
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+def main() -> None:
+    token = authenticate()
+
+    output_file = download_product(token)
+
+    print()
+    print(
+        "SENTINEL-2 RESUMABLE DOWNLOADER COMPLETE"
+    )
+    print("File:", output_file)
+
+
+if __name__ == "__main__":
+    main()
+
+
+===== engines\sentinel2\sentinel2_processor.py =====
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import numpy as np
+import rasterio
+
+
+# ============================================================
+# GEOSHIELD SENTINEL-2 PROCESSOR
+# ============================================================
+#
+# Current capability:
+#   Sentinel-2 L2A SAFE
+#        ?
+#   B04 (Red) + B08 (NIR)
+#        ?
+#   NDVI
+#        ?
+#   GeoTIFF
+#
+# ============================================================
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+SENTINEL2_ROOT = PROJECT_ROOT / "data" / "sentinel2"
+EXTRACTED_ROOT = SENTINEL2_ROOT / "extracted"
+OUTPUT_ROOT = SENTINEL2_ROOT / "processed"
+
+NDVI_OUTPUT = OUTPUT_ROOT / "ndvi.tif"
+
+
+# ============================================================
+# FIND SAFE PRODUCT
+# ============================================================
+
+def find_safe_product() -> Path:
+    """Find the first Sentinel-2 SAFE product in the extracted directory."""
+
+    if not EXTRACTED_ROOT.exists():
+        raise FileNotFoundError(
+            f"Sentinel-2 extraction directory does not exist: "
+            f"{EXTRACTED_ROOT}"
+        )
+
+    safe_products = sorted(EXTRACTED_ROOT.glob("*.SAFE"))
+
+    if not safe_products:
+        raise FileNotFoundError(
+            f"No Sentinel-2 .SAFE product found in: "
+            f"{EXTRACTED_ROOT}"
+        )
+
+    return safe_products[0]
+
+
+# ============================================================
+# FIND BAND
+# ============================================================
+
+def find_band(safe_product: Path, band: str) -> Path:
+    """Find a specific Sentinel-2 JP2 band."""
+
+    matches = list(
+        safe_product.rglob(f"*_{band}_10m.jp2")
+    )
+
+    if not matches:
+        raise FileNotFoundError(
+            f"Could not find {band} 10 m band in {safe_product}"
+        )
+
+    return matches[0]
+
+
+# ============================================================
+# READ RASTER
+# ============================================================
+
+def read_band(path: Path):
+    """Read a single raster band."""
+
+    with rasterio.open(path) as src:
+
+        data = src.read(1).astype(np.float32)
+
+        profile = src.profile.copy()
+
+        transform = src.transform
+
+        crs = src.crs
+
+        nodata = src.nodata
+
+    return data, profile, transform, crs, nodata
+
+
+# ============================================================
+# CALCULATE NDVI
+# ============================================================
+
+def calculate_ndvi(
+    red: np.ndarray,
+    nir: np.ndarray,
+) -> np.ndarray:
+    """Calculate NDVI from Sentinel-2 B04 and B08."""
+
+    denominator = nir + red
+
+    ndvi = np.full(
+        red.shape,
+        np.nan,
+        dtype=np.float32,
+    )
+
+    valid = denominator != 0
+
+    ndvi[valid] = (
+        (nir[valid] - red[valid])
+        / denominator[valid]
+    )
+
+    return ndvi
+
+
+# ============================================================
+# SAVE NDVI
+# ============================================================
+
+def save_ndvi(
+    ndvi: np.ndarray,
+    profile: dict,
+    output_path: Path,
+) -> None:
+    """Save NDVI as a GeoTIFF."""
+
+    output_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    output_profile = profile.copy()
+
+    output_profile.update(
+        driver="GTiff",
+        dtype="float32",
+        count=1,
+        compress="deflate",
+        nodata=-9999.0,
+    )
+
+    output = np.where(
+        np.isfinite(ndvi),
+        ndvi,
+        -9999.0,
+    ).astype(np.float32)
+
+    with rasterio.open(
+        output_path,
+        "w",
+        **output_profile,
+    ) as dst:
+
+        dst.write(
+            output,
+            1,
+        )
+
+
+# ============================================================
+# STATISTICS
+# ============================================================
+
+def print_statistics(ndvi: np.ndarray) -> None:
+    """Print useful NDVI statistics."""
+
+    valid = ndvi[np.isfinite(ndvi)]
+
+    if valid.size == 0:
+        print("No valid NDVI pixels found.")
+        return
+
+    print()
+    print("===== NDVI STATISTICS =====")
+
+    print(
+        "Valid pixels:",
+        f"{valid.size:,}",
+    )
+
+    print(
+        "Minimum:",
+        f"{float(np.min(valid)):.4f}",
+    )
+
+    print(
+        "Maximum:",
+        f"{float(np.max(valid)):.4f}",
+    )
+
+    print(
+        "Mean:",
+        f"{float(np.mean(valid)):.4f}",
+    )
+
+    print(
+        "Median:",
+        f"{float(np.median(valid)):.4f}",
+    )
+
+    print(
+        "============================"
+    )
+
+
+# ============================================================
+# MAIN PROCESSING PIPELINE
+# ============================================================
+
+def process_sentinel2() -> Path:
+
+    print()
+    print("===== GEOSHIELD SENTINEL-2 PROCESSOR =====")
+
+    # --------------------------------------------------------
+    # Locate SAFE product
+    # --------------------------------------------------------
+
+    safe_product = find_safe_product()
+
+    print()
+    print("SAFE product:")
+    print(safe_product)
+
+    # --------------------------------------------------------
+    # Locate B04 and B08
+    # --------------------------------------------------------
+
+    red_path = find_band(
+        safe_product,
+        "B04",
+    )
+
+    nir_path = find_band(
+        safe_product,
+        "B08",
+    )
+
+    print()
+    print("Red band (B04):")
+    print(red_path)
+
+    print()
+    print("NIR band (B08):")
+    print(nir_path)
+
+    # --------------------------------------------------------
+    # Read bands
+    # --------------------------------------------------------
+
+    print()
+    print("Reading B04...")
+
+    red, red_profile, red_transform, red_crs, _ = read_band(
+        red_path
+    )
+
+    print(
+        "B04 shape:",
+        red.shape,
+    )
+
+    print()
+    print("Reading B08...")
+
+    nir, nir_profile, nir_transform, nir_crs, _ = read_band(
+        nir_path
+    )
+
+    print(
+        "B08 shape:",
+        nir.shape,
+    )
+
+    # --------------------------------------------------------
+    # Validate geometry
+    # --------------------------------------------------------
+
+    if red.shape != nir.shape:
+        raise ValueError(
+            f"B04 and B08 dimensions do not match: "
+            f"{red.shape} vs {nir.shape}"
+        )
+
+    if red_transform != nir_transform:
+        raise ValueError(
+            "B04 and B08 have different geotransforms."
+        )
+
+    if red_crs != nir_crs:
+        raise ValueError(
+            "B04 and B08 have different coordinate reference systems."
+        )
+
+    # --------------------------------------------------------
+    # Sentinel-2 reflectance scaling
+    # --------------------------------------------------------
+    #
+    # Sentinel-2 L2A image values are normally scaled
+    # integers. Dividing both bands by the same scale factor
+    # does not change the NDVI ratio.
+    #
+    # Therefore the NDVI calculation can safely use the
+    # original values directly.
+    #
+    # --------------------------------------------------------
+
+    print()
+    print("Calculating NDVI...")
+
+    ndvi = calculate_ndvi(
+        red,
+        nir,
+    )
+
+    # --------------------------------------------------------
+    # Save result
+    # --------------------------------------------------------
+
+    print()
+    print("Saving NDVI GeoTIFF...")
+
+    save_ndvi(
+        ndvi,
+        red_profile,
+        NDVI_OUTPUT,
+    )
+
+    print(
+        "NDVI output:",
+        NDVI_OUTPUT,
+    )
+
+    # --------------------------------------------------------
+    # Statistics
+    # --------------------------------------------------------
+
+    print_statistics(ndvi)
+
+    print()
+    print("GeoShield Sentinel-2 processing: HEALTHY")
+    print("==========================================")
+
+    return NDVI_OUTPUT
+
+
+# ============================================================
+# ENTRY POINT
+# ============================================================
+
+if __name__ == "__main__":
+
+    try:
+
+        output = process_sentinel2()
+
+        print()
+        print("PROCESSING COMPLETE.")
+        print("Output file:", output)
+
+    except Exception as exc:
+
+        print()
+        print("===== SENTINEL-2 PROCESSING FAILED =====")
+        print("Error type:", type(exc).__name__)
+        print("Error:", str(exc))
+        print("========================================")
+
+        raise
+
+
+===== engines\sentinel2.day4-backup\sentinel2_resumable_downloader.py =====
+
+import os
+import sys
+import time
+import httpx
+
+# ============================================================
+# GEOSHIELD SENTINEL-2 RESUMABLE DOWNLOADER
+# Copernicus Data Space Ecosystem
+#
+# Features:
+# - Authentication
+# - Resumable HTTP downloads
+# - HTTP Range support
+# - Automatic retries
+# - Preserves partially downloaded files
+# - Progress reporting
+# ============================================================
+
+USERNAME = os.getenv("CDSE_USERNAME")
+PASSWORD = os.getenv("CDSE_PASSWORD")
+
+CLIENT_ID = "cdse-public"
+
+TOKEN_URL = (
+    "https://identity.dataspace.copernicus.eu/"
+    "auth/realms/CDSE/protocol/openid-connect/token"
+)
+
+DOWNLOAD_URL = (
+    "https://zipper.dataspace.copernicus.eu/"
+    "odata/v1/Products"
+)
+
+OUTPUT_DIR = "data/sentinel2"
+
+# Latest Sentinel-2 product discovered by the connector
+PRODUCT_UUID = "c11a86f5-30a9-4de1-995d-8977f7f5085b"
+
+MAX_RETRIES = 10
+CHUNK_SIZE = 4 * 1024 * 1024
+
+# Long timeout because Sentinel-2 products are large
+TIMEOUT = httpx.Timeout(
+    connect=60.0,
+    read=300.0,
+    write=60.0,
+    pool=60.0,
+)
+
+
+# ============================================================
+# AUTHENTICATION
+# ============================================================
+
+def authenticate():
+
+    print("===== GEOSHIELD SENTINEL-2 RESUMABLE DOWNLOADER =====")
+    print("Authenticating with Copernicus Data Space...")
+
+    if not USERNAME or not PASSWORD:
+
+        print()
+        print("ERROR: CDSE credentials are not set.")
+        print()
+        print("Run:")
+        print('$env:CDSE_USERNAME="your_email"')
+        print('$env:CDSE_PASSWORD="your_new_password"')
+        sys.exit(1)
+
+    response = httpx.post(
+        TOKEN_URL,
+        data={
+            "grant_type": "password",
+            "client_id": CLIENT_ID,
+            "username": USERNAME,
+            "password": PASSWORD,
+        },
+        timeout=60,
+    )
+
+    print("AUTH:", response.status_code)
+
+    response.raise_for_status()
+
+    token = response.json().get("access_token")
+
+    if not token:
+
+        print("ERROR: No access token returned.")
+        sys.exit(1)
+
+    print("TOKEN: True")
+
+    return token
+
+
+# ============================================================
+# DOWNLOAD
+# ============================================================
+
+def download_product(token):
+
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    output_file = os.path.join(
+        OUTPUT_DIR,
+        f"{PRODUCT_UUID}.zip"
+    )
+
+    url = (
+        f"{DOWNLOAD_URL}"
+        f"({PRODUCT_UUID})"
+        f"/$value"
+    )
+
+    print()
+    print("===== SENTINEL-2 DOWNLOAD =====")
+    print("UUID:", PRODUCT_UUID)
+    print("Destination:", output_file)
+
+    existing_size = 0
+
+    if os.path.exists(output_file):
+
+        existing_size = os.path.getsize(output_file)
+
+        print()
+        print(
+            f"Existing partial file: "
+            f"{existing_size / 1024 / 1024:.2f} MB"
+        )
+
+        print("Attempting to resume download...")
+
+    else:
+
+        print()
+        print("No partial file found.")
+        print("Starting new download.")
+
+    downloaded = existing_size
+
+    for attempt in range(1, MAX_RETRIES + 1):
+
+        print()
+        print(
+            f"===== DOWNLOAD ATTEMPT "
+            f"{attempt}/{MAX_RETRIES} ====="
+        )
+
+        headers = {
+            "Authorization": f"Bearer {token}"
+        }
+
+        # ----------------------------------------------------
+        # Resume request
+        # ----------------------------------------------------
+
+        if downloaded > 0:
+
+            headers["Range"] = f"bytes={downloaded}-"
+
+            print(
+                f"Requesting bytes from "
+                f"{downloaded:,}..."
+            )
+
+        try:
+
+            with httpx.stream(
+                "GET",
+                url,
+                headers=headers,
+                timeout=TIMEOUT,
+            ) as response:
+
+                print(
+                    "HTTP:",
+                    response.status_code
+                )
+
+                print(
+                    "Content-Type:",
+                    response.headers.get(
+                        "content-type"
+                    )
+                )
+
+                # ------------------------------------------------
+                # Server accepted resume
+                # ------------------------------------------------
+
+                if downloaded > 0:
+
+                    if response.status_code == 206:
+
+                        print(
+                            "Resume support: ACCEPTED"
+                        )
+
+                        mode = "ab"
+
+                    elif response.status_code == 200:
+
+                        print(
+                            "WARNING: Server returned "
+                            "200 instead of 206."
+                        )
+
+                        print(
+                            "Restarting download "
+                            "from zero."
+                        )
+
+                        downloaded = 0
+
+                        mode = "wb"
+
+                    else:
+
+                        response.raise_for_status()
+
+                else:
+
+                    response.raise_for_status()
+
+                    mode = "wb"
+
+                # ------------------------------------------------
+                # Determine total size
+                # ------------------------------------------------
+
+                content_length = response.headers.get(
+                    "content-length"
+                )
+
+                if content_length:
+
+                    remaining = int(content_length)
+
+                    if response.status_code == 206:
+
+                        total_size = (
+                            downloaded +
+                            remaining
+                        )
+
+                    else:
+
+                        total_size = remaining
+
+                else:
+
+                    total_size = None
+
+                print()
+
+                if total_size:
+
+                    print(
+                        "Total size:",
+                        f"{total_size / 1024 / 1024:.2f} MB"
+                    )
+
+                # ------------------------------------------------
+                # Write data
+                # ------------------------------------------------
+
+                with open(
+                    output_file,
+                    mode
+                ) as file:
+
+                    last_report = time.time()
+
+                    for chunk in response.iter_bytes(
+                        chunk_size=CHUNK_SIZE
+                    ):
+
+                        if not chunk:
+                            continue
+
+                        file.write(chunk)
+
+                        downloaded += len(chunk)
+
+                        now = time.time()
+
+                        if now - last_report >= 2:
+
+                            if total_size:
+
+                                percent = (
+                                    downloaded /
+                                    total_size *
+                                    100
+                                )
+
+                                print(
+                                    f"Downloaded: "
+                                    f"{downloaded / 1024 / 1024:.1f} MB "
+                                    f"/ "
+                                    f"{total_size / 1024 / 1024:.1f} MB "
+                                    f"({percent:.1f}%)"
+                                )
+
+                            else:
+
+                                print(
+                                    f"Downloaded: "
+                                    f"{downloaded / 1024 / 1024:.1f} MB"
+                                )
+
+                            last_report = now
+
+                print()
+                print(
+                    "Connection completed successfully."
+                )
+
+                # ------------------------------------------------
+                # Verify completion
+                # ------------------------------------------------
+
+                final_size = os.path.getsize(
+                    output_file
+                )
+
+                print(
+                    "File size:",
+                    f"{final_size / 1024 / 1024:.2f} MB"
+                )
+
+                if total_size:
+
+                    if final_size >= total_size:
+
+                        print()
+                        print(
+                            "DOWNLOAD COMPLETE."
+                        )
+
+                        return output_file
+
+                    else:
+
+                        print()
+                        print(
+                            "Download incomplete."
+                        )
+
+                        print(
+                            "Will resume..."
+                        )
+
+                        downloaded = final_size
+
+        except (
+            httpx.ReadTimeout,
+            httpx.ConnectTimeout,
+            httpx.NetworkError,
+            httpx.RemoteProtocolError,
+        ) as error:
+
+            print()
+            print(
+                "NETWORK ERROR:"
+            )
+
+            print(error)
+
+            if os.path.exists(output_file):
+
+                downloaded = os.path.getsize(
+                    output_file
+                )
+
+                print()
+                print(
+                    f"Partial file preserved:"
+                )
+
+                print(
+                    f"{downloaded / 1024 / 1024:.2f} MB"
+                )
+
+            if attempt < MAX_RETRIES:
+
+                wait_time = min(
+                    attempt * 10,
+                    60
+                )
+
+                print(
+                    f"Retrying in "
+                    f"{wait_time} seconds..."
+                )
+
+                time.sleep(wait_time)
+
+            else:
+
+                print()
+                print(
+                    "Maximum retries reached."
+                )
+
+                sys.exit(1)
+
+    return output_file
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+def main():
+
+    token = authenticate()
+
+    download_product(token)
+
+    print()
+    print(
+        "SENTINEL-2 RESUMABLE DOWNLOADER COMPLETE"
+    )
+
+
+if __name__ == "__main__":
+    main()
+
+===== engines\sentinel2.day4-backup\sentinel2_ndvi_processor.py =====
+
+import os
+import glob
+import numpy as np
+import rasterio
+from rasterio.warp import reproject, Resampling
+
+# ============================================================
+# GEOSHIELD SENTINEL-2 TRUE NDVI PROCESSOR
+# B04 = Red
+# B08 = Near Infrared
+# SCL = Scene Classification Layer
+# ============================================================
+
+SAFE_ROOT = r"data/sentinel2/S2A_MSIL2A_20260812T074031_N0512_R092_T37MBU_20260812T125812.SAFE"
+OUTPUT_DIR = r"data/ndvi"
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+
+def find_band(pattern):
+    matches = glob.glob(
+        os.path.join(SAFE_ROOT, "**", pattern),
+        recursive=True
+    )
+
+    if not matches:
+        raise FileNotFoundError(
+            f"Could not find Sentinel-2 asset: {pattern}"
+        )
+
+    return matches[0]
+
+
+def read_band(path):
+    with rasterio.open(path) as src:
+        data = src.read(1).astype(np.float32)
+        profile = src.profile.copy()
+        transform = src.transform
+        crs = src.crs
+        nodata = src.nodata
+
+    return data, profile, transform, crs, nodata
+
+
+def resample_to_reference(
+    source_path,
+    reference_profile,
+    reference_transform,
+    reference_crs,
+):
+    with rasterio.open(source_path) as src:
+        destination = np.zeros(
+            (
+                reference_profile["height"],
+                reference_profile["width"],
+            ),
+            dtype=np.uint8,
+        )
+
+        reproject(
+            source=src.read(1),
+            destination=destination,
+            src_transform=src.transform,
+            src_crs=src.crs,
+            dst_transform=reference_transform,
+            dst_crs=reference_crs,
+            resampling=Resampling.nearest,
+        )
+
+    return destination
+
+
+print("===== GEOSHIELD SENTINEL-2 TRUE NDVI PROCESSOR =====")
+
+b04_path = find_band("*B04_10m.jp2")
+b08_path = find_band("*B08_10m.jp2")
+scl_path = find_band("*SCL_20m.jp2")
+
+print()
+print("B04:", b04_path)
+print("B08:", b08_path)
+print("SCL:", scl_path)
+
+red, profile, transform, crs, _ = read_band(b04_path)
+nir, _, _, _, _ = read_band(b08_path)
+
+if red.shape != nir.shape:
+    raise RuntimeError(
+        f"B04/B08 dimensions differ: {red.shape} vs {nir.shape}"
+    )
+
+print()
+print("B04 shape:", red.shape)
+print("B08 shape:", nir.shape)
+print("CRS:", crs)
+print("Resolution:", profile["transform"].a, profile["transform"].e)
+
+# ------------------------------------------------------------
+# Sentinel-2 SCL classes that are considered invalid
+#
+# 0  No data
+# 1  Saturated / defective
+# 3  Cloud shadow
+# 8  Cloud medium probability
+# 9  Cloud high probability
+# 10 Thin cirrus
+# 11 Snow / ice
+# ------------------------------------------------------------
+
+scl = resample_to_reference(
+    scl_path,
+    profile,
+    transform,
+    crs,
+)
+
+invalid_classes = {
+    0,
+    1,
+    3,
+    8,
+    9,
+    10,
+    11,
+}
+
+quality_mask = np.ones(scl.shape, dtype=bool)
+
+for class_value in invalid_classes:
+    quality_mask &= scl != class_value
+
+# ------------------------------------------------------------
+# Sentinel-2 L2A reflectance scaling
+# ------------------------------------------------------------
+
+red = red / 10000.0
+nir = nir / 10000.0
+
+denominator = nir + red
+
+valid = (
+    quality_mask
+    & np.isfinite(red)
+    & np.isfinite(nir)
+    & (denominator != 0)
+)
+
+ndvi = np.full(
+    red.shape,
+    np.nan,
+    dtype=np.float32,
+)
+
+ndvi[valid] = (
+    (nir[valid] - red[valid])
+    / denominator[valid]
+)
+
+# Physically useful NDVI range
+ndvi[
+    (ndvi < -1.0)
+    | (ndvi > 1.0)
+] = np.nan
+
+output_path = os.path.join(
+    OUTPUT_DIR,
+    "sentinel2_20260812_T37MBU_ndvi.tif"
+)
+
+profile.update(
+    driver="GTiff",
+    dtype="float32",
+    count=1,
+    compress="deflate",
+    predictor=3,
+    nodata=np.nan,
+)
+
+with rasterio.open(output_path, "w", **profile) as dst:
+    dst.write(ndvi, 1)
+
+valid_pixels = np.isfinite(ndvi)
+
+print()
+print("===== NDVI SUMMARY =====")
+print("Valid pixels:", int(valid_pixels.sum()))
+
+if valid_pixels.any():
+    print(
+        "Mean NDVI:",
+        float(np.nanmean(ndvi))
+    )
+    print(
+        "Minimum NDVI:",
+        float(np.nanmin(ndvi))
+    )
+    print(
+        "Maximum NDVI:",
+        float(np.nanmax(ndvi))
+    )
+
+print()
+print("Output:", output_path)
+print()
+print("SENTINEL-2 TRUE NDVI PROCESSOR COMPLETE")
+
+
+===== engines\sentinel2.day4-backup\sentinel2_quality_mask.py =====
+
+import os
+import glob
+import numpy as np
+import rasterio
+from rasterio.warp import reproject, Resampling
+
+# ============================================================
+# GEOSHIELD SENTINEL-2 QUALITY MASK ENGINE
+# ============================================================
+
+SAFE_ROOT = r"data/sentinel2/S2A_MSIL2A_20260812T074031_N0512_R092_T37MBU_20260812T125812.SAFE"
+OUTPUT_DIR = r"data/ndvi"
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+
+def find_asset(pattern):
+    matches = glob.glob(
+        os.path.join(SAFE_ROOT, "**", pattern),
+        recursive=True,
+    )
+
+    if not matches:
+        raise FileNotFoundError(
+            f"Asset not found: {pattern}"
+        )
+
+    return matches[0]
+
+
+b04_path = find_asset("*B04_10m.jp2")
+scl_path = find_asset("*SCL_20m.jp2")
+
+print("===== GEOSHIELD SENTINEL-2 QUALITY MASK =====")
+print()
+print("Reference B04:", b04_path)
+print("SCL:", scl_path)
+
+with rasterio.open(b04_path) as reference:
+    profile = reference.profile.copy()
+    transform = reference.transform
+    crs = reference.crs
+    width = reference.width
+    height = reference.height
+
+mask = np.zeros(
+    (height, width),
+    dtype=np.uint8,
+)
+
+with rasterio.open(scl_path) as scl:
+    reproject(
+        source=scl.read(1),
+        destination=mask,
+        src_transform=scl.transform,
+        src_crs=scl.crs,
+        dst_transform=transform,
+        dst_crs=crs,
+        resampling=Resampling.nearest,
+    )
+
+# Valid SCL classes:
+#
+# 2  Dark area / shadows
+# 4  Vegetation
+# 5  Bare soil
+# 6  Water
+# 7  Unclassified
+#
+# We deliberately reject:
+# 0  No data
+# 1  Saturated / defective
+# 3  Cloud shadow
+# 8  Cloud medium probability
+# 9  Cloud high probability
+# 10 Thin cirrus
+# 11 Snow / ice
+
+invalid = np.isin(
+    mask,
+    [0, 1, 3, 8, 9, 10, 11],
+)
+
+quality = np.where(
+    invalid,
+    0,
+    1,
+).astype(np.uint8)
+
+output = os.path.join(
+    OUTPUT_DIR,
+    "sentinel2_20260812_T37MBU_quality_mask.tif",
+)
+
+profile.update(
+    driver="GTiff",
+    dtype="uint8",
+    count=1,
+    compress="deflate",
+    nodata=0,
+)
+
+with rasterio.open(output, "w", **profile) as dst:
+    dst.write(quality, 1)
+
+valid_pixels = int((quality == 1).sum())
+invalid_pixels = int((quality == 0).sum())
+
+print()
+print("===== QUALITY SUMMARY =====")
+print("Valid pixels:", valid_pixels)
+print("Invalid pixels:", invalid_pixels)
+
+total = valid_pixels + invalid_pixels
+
+if total:
+    print(
+        "Valid percentage:",
+        round(valid_pixels / total * 100, 2),
+        "%"
+    )
+
+print()
+print("Output:", output)
+print()
+print("SENTINEL-2 QUALITY MASK COMPLETE")
+
+
+===== engines\sentinel2.day4-backup\sentinel2_hotspot_detector.py =====
+
+import os
+import numpy as np
+import rasterio
+from rasterio.features import shapes
+from shapely.geometry import shape
+import geopandas as gpd
+
+# ============================================================
+# GEOSHIELD SENTINEL-2 HOTSPOT DETECTOR
+# ============================================================
+
+NDVI_PATH = (
+    "data/ndvi/"
+    "sentinel2_20260812_T37MBU_ndvi.tif"
+)
+
+OUTPUT_DIR = "data/ndvi"
+
+OUTPUT_PATH = (
+    OUTPUT_DIR
+    + "/sentinel2_20260812_T37MBU_hotspots.geojson"
+)
+
+# NDVI below this threshold is treated as vegetation stress.
+STRESS_THRESHOLD = 0.20
+
+# Ignore tiny fragments.
+MIN_AREA_KM2 = 0.01
+
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+print("===== GEOSHIELD SENTINEL-2 HOTSPOT DETECTOR =====")
+
+if not os.path.exists(NDVI_PATH):
+    raise FileNotFoundError(
+        f"NDVI raster not found: {NDVI_PATH}"
+    )
+
+with rasterio.open(NDVI_PATH) as src:
+    ndvi = src.read(1)
+    transform = src.transform
+    crs = src.crs
+
+print("Input:", NDVI_PATH)
+print("CRS:", crs)
+print("Stress threshold:", STRESS_THRESHOLD)
+
+valid = np.isfinite(ndvi)
+
+stress_mask = (
+    valid
+    & (ndvi < STRESS_THRESHOLD)
+)
+
+print()
+print("Valid NDVI pixels:", int(valid.sum()))
+print("Stress pixels:", int(stress_mask.sum()))
+
+# ------------------------------------------------------------
+# Polygonize the stress mask
+# ------------------------------------------------------------
+
+records = []
+
+for geometry, value in shapes(
+    stress_mask.astype(np.uint8),
+    mask=stress_mask,
+    transform=transform,
+):
+    if value != 1:
+        continue
+
+    polygon = shape(geometry)
+
+    if polygon.is_empty:
+        continue
+
+    area_km2 = polygon.area / 1_000_000.0
+
+    if area_km2 < MIN_AREA_KM2:
+        continue
+
+    records.append(
+        {
+            "geometry": polygon,
+            "area_km2": area_km2,
+            "stress_threshold": STRESS_THRESHOLD,
+        }
+    )
+
+print()
+print("Raw stress polygons:", len(records))
+
+if not records:
+    print()
+    print("No vegetation-stress hotspots detected.")
+    print("Try adjusting STRESS_THRESHOLD.")
+    raise SystemExit(0)
+
+gdf = gpd.GeoDataFrame(
+    records,
+    crs=crs,
+)
+
+# ------------------------------------------------------------
+# Calculate mean NDVI inside each hotspot
+# ------------------------------------------------------------
+
+mean_values = []
+
+with rasterio.open(NDVI_PATH) as src:
+
+    from rasterio.mask import mask
+
+    for geometry in gdf.geometry:
+
+        try:
+            clipped, _ = mask(
+                src,
+                [geometry],
+                crop=True,
+                nodata=np.nan,
+            )
+
+            values = clipped[0]
+
+            values = values[
+                np.isfinite(values)
+            ]
+
+            if len(values):
+                mean_values.append(
+                    float(np.mean(values))
+                )
+            else:
+                mean_values.append(np.nan)
+
+        except Exception:
+            mean_values.append(np.nan)
+
+gdf["mean_ndvi"] = mean_values
+
+# ------------------------------------------------------------
+# Severity classification
+# ------------------------------------------------------------
+
+def classify_severity(ndvi_value):
+
+    if not np.isfinite(ndvi_value):
+        return "UNKNOWN"
+
+    if ndvi_value < 0.05:
+        return "CRITICAL"
+
+    if ndvi_value < 0.15:
+        return "SEVERE"
+
+    if ndvi_value < 0.20:
+        return "MODERATE"
+
+    return "LOW"
+
+
+gdf["severity"] = gdf["mean_ndvi"].apply(
+    classify_severity
+)
+
+# Rank largest/stressed areas first.
+
+gdf = gdf.sort_values(
+    ["severity", "area_km2"],
+    ascending=[True, False],
+).reset_index(drop=True)
+
+gdf["hotspot_rank"] = (
+    np.arange(len(gdf)) + 1
+)
+
+gdf["hotspot_id"] = [
+    f"S2-{i:06d}"
+    for i in range(1, len(gdf) + 1)
+]
+
+gdf.to_file(
+    OUTPUT_PATH,
+    driver="GeoJSON",
+)
+
+print()
+print("===== HOTSPOT SUMMARY =====")
+print("Hotspots:", len(gdf))
+print(
+    "Total area km2:",
+    round(float(gdf.area_km2.sum()), 3)
+)
+print(
+    "Largest hotspot km2:",
+    round(float(gdf.area_km2.max()), 3)
+)
+
+print()
+print("===== SEVERITY DISTRIBUTION =====")
+print(
+    gdf["severity"].value_counts()
+)
+
+print()
+print("Output:", OUTPUT_PATH)
+print()
+print("SENTINEL-2 HOTSPOT DETECTOR COMPLETE")
+
+
+===== engines\engine.py =====
+
+
+
+class Engine:
+
+    def __init__(self,name):
+
+        self.name=name
+
+        self.status="offline"
+
+    def start(self):
+
+        self.status="online"
+
+    def stop(self):
+
+        self.status="offline"
+
+
+
+===== engines\__init__.py =====
+
+
+
+from .engine import Engine
+
+
+
+===== engines\satellite_engine.py =====
+
+"""
+GeoShield Intelligence Platform
+
+Satellite Intelligence Engine
+
+Author:
+David Omondi Ouma
+Founder & Chief Executive Officer (CEO)
+"""
+
+
+class SatelliteEngine:
+    """
+    Responsible for managing satellite data sources.
+    """
+
+    def __init__(self):
+
+        self.providers = []
+
+    def register_provider(self, provider):
+
+        self.providers.append(provider)
+
+    def list_providers(self):
+
+        return self.providers
+
+    def provider_count(self):
+
+        return len(self.providers)
+
+===== engines\satellite_search_engine.py =====
+
+"""
+GeoShield Satellite Search Engine
+
+Coordinates searches across all satellite providers.
+"""
+
+from satellites.sentinel.search import SentinelSearch
+from satellites.landsat.search import LandsatSearch
+from satellites.modis.search import MODISSearch
+from satellites.viirs.search import VIIRSSearch
+
+
+class SatelliteSearchEngine:
+    """
+    Unified search engine for all satellite providers.
+    """
+
+    def __init__(self):
+
+        self.providers = {
+            "Sentinel": SentinelSearch(),
+            "Landsat": LandsatSearch(),
+            "MODIS": MODISSearch(),
+            "VIIRS": VIIRSSearch(),
+        }
+
+    def search_all(
+        self,
+        latitude,
+        longitude,
+        start_date,
+        end_date,
+        cloud_cover=20,
+        limit=10,
+    ):
+        """
+        Search every registered provider.
+        """
+
+        results = []
+
+        for name, provider in self.providers.items():
+
+            try:
+
+                provider_results = provider.search(
+                    latitude=latitude,
+                    longitude=longitude,
+                    start_date=start_date,
+                    end_date=end_date,
+                    cloud_cover=cloud_cover,
+                    limit=limit,
+                )
+
+                results.extend(provider_results)
+
+            except Exception as error:
+
+                print(f"{name} search failed: {error}")
+
+        return results
+
+    def available_providers(self):
+
+        return list(self.providers.keys())
+
+===== engines\ndvi_engine.py =====
+
+from pathlib import Path
+
+import numpy as np
+import rasterio
+
+
+def calculate_ndvi(red_path, nir_path, output_path):
+    print("===== GEOSHIELD NDVI ENGINE =====")
+
+    print("Red:", red_path)
+    print("NIR:", nir_path)
+
+    with rasterio.open(red_path) as red_src:
+        red = red_src.read(1).astype("float32")
+        profile = red_src.profile.copy()
+        red_nodata = red_src.nodata
+
+    with rasterio.open(nir_path) as nir_src:
+        nir = nir_src.read(1).astype("float32")
+        nir_nodata = nir_src.nodata
+
+    print("Red shape:", red.shape)
+    print("NIR shape:", nir.shape)
+    print("CRS:", profile["crs"])
+
+    if red.shape != nir.shape:
+        raise ValueError("B04 and B08 dimensions do not match.")
+
+    # Sentinel-2 L2A reflectance scaling.
+    # Both bands use the same scale factor, so it cancels
+    # mathematically in the NDVI ratio.
+    red = red * 0.0001
+    nir = nir * 0.0001
+
+    valid = np.isfinite(red) & np.isfinite(nir)
+
+    if red_nodata is not None:
+        valid &= red != red_nodata
+
+    if nir_nodata is not None:
+        valid &= nir != nir_nodata
+
+    denominator = nir + red
+
+    valid &= denominator != 0
+
+    ndvi = np.full(red.shape, np.nan, dtype="float32")
+
+    ndvi[valid] = (
+        (nir[valid] - red[valid])
+        / denominator[valid]
+    )
+
+    # Remove physically impossible values caused by invalid pixels.
+    ndvi[(ndvi < -1) | (ndvi > 1)] = np.nan
+
+    profile.update(
+        driver="GTiff",
+        dtype="float32",
+        count=1,
+        nodata=-9999.0,
+        compress="deflate",
+        predictor=3,
+        tiled=True,
+    )
+
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    output = np.where(
+        np.isfinite(ndvi),
+        ndvi,
+        -9999.0
+    ).astype("float32")
+
+    with rasterio.open(output_path, "w", **profile) as dst:
+        dst.write(output, 1)
+
+    valid_ndvi = ndvi[np.isfinite(ndvi)]
+
+    print()
+    print("===== NDVI COMPLETE =====")
+    print("Output:", output_path)
+    print("Pixels:", ndvi.size)
+    print("Valid pixels:", valid_ndvi.size)
+
+    if valid_ndvi.size:
+        print("Minimum:", float(valid_ndvi.min()))
+        print("Maximum:", float(valid_ndvi.max()))
+        print("Mean:", float(valid_ndvi.mean()))
+        print("Median:", float(np.median(valid_ndvi)))
+
+    print("GeoTIFF written successfully.")
+
+
+if __name__ == "__main__":
+
+    root = Path("data/sentinel2")
+
+    red_files = list(root.rglob("*_B04_10m.jp2"))
+    nir_files = list(root.rglob("*_B08_10m.jp2"))
+
+    if not red_files:
+        raise FileNotFoundError("B04 Red band not found.")
+
+    if not nir_files:
+        raise FileNotFoundError("B08 NIR band not found.")
+
+    if len(red_files) > 1:
+        raise RuntimeError(f"Multiple B04 files found: {red_files}")
+
+    if len(nir_files) > 1:
+        raise RuntimeError(f"Multiple B08 files found: {nir_files}")
+
+    calculate_ndvi(
+        red_files[0],
+        nir_files[0],
+        "data/ndvi/sentinel2_ndvi.tif",
+    )
+
+===== engines\ndvi_hotspot_engine.py =====
+
+import rasterio
+import numpy as np
+import os
+
+INPUT = "data/ndvi/sentinel2_ndvi.tif"
+OUTPUT = "data/ndvi/ndvi_hotspots.tif"
+
+LOW_THRESHOLD = 0.20
+HIGH_THRESHOLD = 0.60
+
+print("===== GEOSHIELD NDVI HOTSPOT ENGINE =====")
+
+os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
+
+with rasterio.open(INPUT) as src:
+    ndvi = src.read(1)
+    profile = src.profile.copy()
+    transform = src.transform
+    crs = src.crs
+    nodata = src.nodata
+
+print("Input:", INPUT)
+print("CRS:", crs)
+print("Resolution:", transform.a, "m")
+print("Shape:", ndvi.shape)
+
+valid = np.isfinite(ndvi)
+
+if nodata is not None:
+    valid &= ndvi != nodata
+
+low = valid & (ndvi < LOW_THRESHOLD)
+high = valid & (ndvi > HIGH_THRESHOLD)
+
+# 0 = NoData
+# 1 = Low vegetation / potential stress
+# 2 = Healthy vegetation
+# 3 = Very healthy vegetation
+
+hotspots = np.zeros(ndvi.shape, dtype=np.uint8)
+
+hotspots[valid & (ndvi >= LOW_THRESHOLD) & (ndvi <= HIGH_THRESHOLD)] = 2
+hotspots[high] = 3
+hotspots[low] = 1
+
+profile.update(
+    driver="GTiff",
+    dtype="uint8",
+    count=1,
+    nodata=0,
+    compress="deflate",
+    tiled=True
+)
+
+with rasterio.open(OUTPUT, "w", **profile) as dst:
+    dst.write(hotspots, 1)
+
+pixel_area_m2 = abs(transform.a * transform.e)
+
+low_pixels = int(low.sum())
+healthy_pixels = int(((hotspots == 2)).sum())
+high_pixels = int(high.sum())
+valid_pixels = int(valid.sum())
+
+print()
+print("===== HOTSPOT CLASSIFICATION =====")
+print("Low vegetation pixels:", low_pixels)
+print("Healthy vegetation pixels:", healthy_pixels)
+print("Very healthy pixels:", high_pixels)
+
+print()
+print("===== AREA ANALYSIS =====")
+print("Pixel area:", pixel_area_m2, "m2")
+
+print(
+    "Low vegetation area:",
+    round(low_pixels * pixel_area_m2 / 1_000_000, 3),
+    "km2"
+)
+
+print(
+    "Healthy vegetation area:",
+    round(healthy_pixels * pixel_area_m2 / 1_000_000, 3),
+    "km2"
+)
+
+print(
+    "Very healthy vegetation area:",
+    round(high_pixels * pixel_area_m2 / 1_000_000, 3),
+    "km2"
+)
+
+if valid_pixels > 0:
+    print()
+    print("Low vegetation percentage:",
+          round(low_pixels / valid_pixels * 100, 3), "%")
+
+    print("Healthy vegetation percentage:",
+          round(healthy_pixels / valid_pixels * 100, 3), "%")
+
+    print("Very healthy percentage:",
+          round(high_pixels / valid_pixels * 100, 3), "%")
+
+print()
+print("Output:", OUTPUT)
+print("HOTSPOT ENGINE COMPLETE")
+
+
+===== engines\ndvi_hotspot_polygonizer.py =====
+
+import os
+import rasterio
+import numpy as np
+import geopandas as gpd
+from rasterio.features import shapes
+from shapely.geometry import shape
+
+INPUT = "data/ndvi/ndvi_hotspots.tif"
+OUTPUT = "data/ndvi/vegetation_stress_hotspots.geojson"
+
+# Only Class 1 is treated as vegetation stress.
+TARGET_CLASS = 1
+
+# Minimum hotspot area.
+# 100 pixels × 100 m² = 10,000 m² = 0.01 km²
+MIN_PIXELS = 100
+
+WINDOW_SIZE = 1024
+
+print("===== GEOSHIELD MEMORY-SAFE HOTSPOT ENGINE =====")
+print("Input:", INPUT)
+print("Target class:", TARGET_CLASS)
+print("Minimum pixels:", MIN_PIXELS)
+print("Window:", WINDOW_SIZE, "x", WINDOW_SIZE)
+
+os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
+
+features = []
+
+with rasterio.open(INPUT) as src:
+
+    print("CRS:", src.crs)
+    print("Raster size:", src.width, "x", src.height)
+    print("Resolution:", src.res)
+
+    pixel_area_m2 = abs(src.transform.a * src.transform.e)
+
+    windows_total = (
+        ((src.height + WINDOW_SIZE - 1) // WINDOW_SIZE)
+        *
+        ((src.width + WINDOW_SIZE - 1) // WINDOW_SIZE)
+    )
+
+    window_number = 0
+
+    for row in range(0, src.height, WINDOW_SIZE):
+
+        for col in range(0, src.width, WINDOW_SIZE):
+
+            window_number += 1
+
+            height = min(WINDOW_SIZE, src.height - row)
+            width = min(WINDOW_SIZE, src.width - col)
+
+            window = rasterio.windows.Window(
+                col,
+                row,
+                width,
+                height
+            )
+
+            raster = src.read(1, window=window)
+
+            mask = raster == TARGET_CLASS
+
+            if not mask.any():
+                continue
+
+            window_transform = src.window_transform(window)
+
+            for geom, value in shapes(
+                raster,
+                mask=mask,
+                transform=window_transform
+            ):
+
+                if int(value) != TARGET_CLASS:
+                    continue
+
+                polygon = shape(geom)
+
+                area_pixels = polygon.area / pixel_area_m2
+
+                if area_pixels < MIN_PIXELS:
+                    continue
+
+                features.append({
+                    "geometry": polygon,
+                    "class": TARGET_CLASS,
+                    "area_pixels": int(area_pixels),
+                    "area_m2": polygon.area,
+                    "area_km2": polygon.area / 1_000_000
+                })
+
+            if window_number % 25 == 0:
+                print(
+                    f"Processed windows: {window_number}/{windows_total} | "
+                    f"Hotspots retained: {len(features)}"
+                )
+
+    crs = src.crs
+
+print()
+print("===== HOTSPOT VECTOR CREATION =====")
+print("Candidate polygons retained:", len(features))
+
+if not features:
+    print("No hotspots met the minimum-area threshold.")
+    raise SystemExit(0)
+
+gdf = gpd.GeoDataFrame(
+    features,
+    geometry="geometry",
+    crs=crs
+)
+
+# Add IDs
+gdf.insert(
+    0,
+    "hotspot_id",
+    range(1, len(gdf) + 1)
+)
+
+gdf["severity"] = "VEGETATION_STRESS"
+
+# Sort largest hotspots first
+gdf = gdf.sort_values(
+    "area_km2",
+    ascending=False
+).reset_index(drop=True)
+
+# Reassign IDs after sorting
+gdf["hotspot_id"] = range(1, len(gdf) + 1)
+
+gdf.to_file(
+    OUTPUT,
+    driver="GeoJSON"
+)
+
+print()
+print("===== HOTSPOT ENGINE COMPLETE =====")
+print("Final hotspots:", len(gdf))
+print("Output:", OUTPUT)
+
+print()
+print("===== AREA SUMMARY =====")
+print(
+    "Total hotspot area:",
+    round(gdf["area_km2"].sum(), 3),
+    "km2"
+)
+
+print(
+    "Largest hotspot:",
+    round(gdf["area_km2"].max(), 3),
+    "km2"
+)
+
+print(
+    "Smallest retained hotspot:",
+    round(gdf["area_km2"].min(), 6),
+    "km2"
+)
+
+print()
+print("GeoJSON written successfully.")
+
+
+===== engines\hotspot_intelligence_engine.py =====
+
+import geopandas as gpd
+import rasterio
+import numpy as np
+from rasterio.mask import mask
+import os
+
+HOTSPOTS = "data/ndvi/vegetation_stress_hotspots.geojson"
+NDVI = "data/ndvi/sentinel2_ndvi.tif"
+OUTPUT = "data/ndvi/vegetation_stress_intelligence.geojson"
+
+print("===== GEOSHIELD TRUE NDVI INTELLIGENCE ENGINE =====")
+
+gdf = gpd.read_file(HOTSPOTS)
+
+print("Hotspots:", len(gdf))
+print("Hotspot CRS:", gdf.crs)
+
+with rasterio.open(NDVI) as src:
+
+    print("NDVI CRS:", src.crs)
+    print("NDVI resolution:", src.res)
+
+    # Match hotspot CRS to raster CRS
+    gdf = gdf.to_crs(src.crs)
+
+    mean_values = []
+    min_values = []
+    max_values = []
+    valid_pixels = []
+
+    total = len(gdf)
+
+    print()
+    print("Extracting NDVI statistics...")
+
+    for i, geometry in enumerate(gdf.geometry):
+
+        try:
+            data, _ = mask(
+                src,
+                [geometry],
+                crop=True,
+                nodata=-9999
+            )
+
+            values = data[0].astype("float32")
+
+            values = values[
+                np.isfinite(values) &
+                (values != -9999)
+            ]
+
+            if values.size == 0:
+                mean_values.append(np.nan)
+                min_values.append(np.nan)
+                max_values.append(np.nan)
+                valid_pixels.append(0)
+            else:
+                mean_values.append(float(np.mean(values)))
+                min_values.append(float(np.min(values)))
+                max_values.append(float(np.max(values)))
+                valid_pixels.append(int(values.size))
+
+        except Exception:
+            mean_values.append(np.nan)
+            min_values.append(np.nan)
+            max_values.append(np.nan)
+            valid_pixels.append(0)
+
+        if (i + 1) % 250 == 0 or i + 1 == total:
+            print(
+                f"Processed: {i + 1}/{total}"
+            )
+
+gdf["mean_ndvi"] = mean_values
+gdf["min_ndvi"] = min_values
+gdf["max_ndvi"] = max_values
+gdf["valid_pixels"] = valid_pixels
+
+# Accurate area
+metric = gdf.to_crs("EPSG:32737")
+
+metric["area_km2"] = (
+    metric.geometry.area / 1_000_000
+)
+
+# --------------------------------------------------
+# TRUE NDVI SEVERITY
+# --------------------------------------------------
+
+metric["severity"] = np.select(
+    [
+        metric["mean_ndvi"] < 0.10,
+        metric["mean_ndvi"] < 0.20,
+        metric["mean_ndvi"] < 0.30,
+        metric["mean_ndvi"] < 0.45,
+        metric["mean_ndvi"] >= 0.45
+    ],
+    [
+        "CRITICAL",
+        "SEVERE",
+        "HIGH",
+        "MODERATE",
+        "LOW"
+    ],
+    default="UNKNOWN"
+)
+
+severity_weight = {
+    "CRITICAL": 5,
+    "SEVERE": 4,
+    "HIGH": 3,
+    "MODERATE": 2,
+    "LOW": 1,
+    "UNKNOWN": 0
+}
+
+metric["severity_weight"] = (
+    metric["severity"]
+    .map(severity_weight)
+    .fillna(0)
+)
+
+# --------------------------------------------------
+# PRIORITY SCORE
+# --------------------------------------------------
+
+metric["priority_score"] = (
+    metric["severity_weight"]
+    * np.log1p(metric["area_km2"])
+)
+
+metric["priority"] = np.select(
+    [
+        metric["priority_score"] >= 20,
+        metric["priority_score"] >= 12,
+        metric["priority_score"] >= 6,
+        metric["priority_score"] >= 2
+    ],
+    [
+        "URGENT",
+        "HIGH",
+        "MEDIUM",
+        "LOW"
+    ],
+    default="LOW"
+)
+
+# Rank
+metric = metric.sort_values(
+    "priority_score",
+    ascending=False
+).reset_index(drop=True)
+
+metric["hotspot_rank"] = (
+    np.arange(1, len(metric) + 1)
+)
+
+# Return to original geographic CRS
+output = metric.to_crs(gdf.crs)
+
+os.makedirs(
+    os.path.dirname(OUTPUT),
+    exist_ok=True
+)
+
+output.to_file(
+    OUTPUT,
+    driver="GeoJSON"
+)
+
+# --------------------------------------------------
+# REPORT
+# --------------------------------------------------
+
+print()
+print("===== TRUE NDVI INTELLIGENCE SUMMARY =====")
+
+print("Total hotspots:", len(output))
+
+print(
+    "Total hotspot area:",
+    round(float(output["area_km2"].sum()), 3),
+    "km2"
+)
+
+print(
+    "Largest hotspot:",
+    round(float(output["area_km2"].max()), 3),
+    "km2"
+)
+
+print()
+print("NDVI statistics:")
+
+print(
+    "Mean NDVI:",
+    round(float(output["mean_ndvi"].mean()), 4)
+)
+
+print(
+    "Minimum NDVI:",
+    round(float(output["min_ndvi"].min()), 4)
+)
+
+print(
+    "Maximum NDVI:",
+    round(float(output["max_ndvi"].max()), 4)
+)
+
+print()
+print("===== SEVERITY DISTRIBUTION =====")
+
+print(
+    output["severity"]
+    .value_counts()
+    .to_string()
+)
+
+print()
+print("===== PRIORITY DISTRIBUTION =====")
+
+print(
+    output["priority"]
+    .value_counts()
+    .to_string()
+)
+
+print()
+print("===== TOP 10 HOTSPOTS =====")
+
+columns = [
+    "hotspot_rank",
+    "area_km2",
+    "mean_ndvi",
+    "min_ndvi",
+    "max_ndvi",
+    "severity",
+    "priority",
+    "priority_score"
+]
+
+print(
+    output[columns]
+    .head(10)
+    .to_string(index=False)
+)
+
+print()
+print("Output:", OUTPUT)
+print("TRUE NDVI INTELLIGENCE ENGINE COMPLETE")
+
+
+===== engines\impact_risk_engine.py =====
+
+import geopandas as gpd
+import pandas as pd
+import os
+
+INPUT = "data/ndvi/vegetation_stress_intelligence.geojson"
+OUTPUT = "data/ndvi/vegetation_stress_impact.geojson"
+
+print("===== GEOSHIELD IMPACT FOUNDATION ENGINE =====")
+print("Input:", INPUT)
+
+gdf = gpd.read_file(INPUT)
+
+print("Hotspots loaded:", len(gdf))
+print("CRS:", gdf.crs)
+
+# Ensure projected CRS for accurate area calculations
+if gdf.crs is None:
+    raise ValueError("Input GeoJSON has no CRS.")
+
+if not gdf.crs.is_projected:
+    gdf = gdf.to_crs("EPSG:32737")
+
+# Recalculate geometry area
+gdf["geometry_area_km2"] = gdf.geometry.area / 1_000_000
+
+# Basic geographic descriptors
+gdf["centroid_x"] = gdf.geometry.centroid.x
+gdf["centroid_y"] = gdf.geometry.centroid.y
+
+# Keep the existing intelligence fields
+if "priority_score" in gdf.columns:
+    gdf["impact_score"] = (
+        gdf["priority_score"]
+        * (1 + gdf["geometry_area_km2"] / gdf["geometry_area_km2"].max())
+    )
+else:
+    gdf["impact_score"] = (
+        gdf["geometry_area_km2"]
+        / gdf["geometry_area_km2"].max()
+    )
+
+gdf["impact_rank"] = (
+    gdf["impact_score"]
+    .rank(method="dense", ascending=False)
+    .astype(int)
+)
+
+# Sort highest-impact areas first
+gdf = gdf.sort_values("impact_score", ascending=False)
+
+os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
+
+gdf.to_file(
+    OUTPUT,
+    driver="GeoJSON"
+)
+
+print()
+print("===== IMPACT SUMMARY =====")
+print("Total hotspots:", len(gdf))
+print(
+    "Total area km2:",
+    round(float(gdf["geometry_area_km2"].sum()), 3)
+)
+print(
+    "Largest hotspot km2:",
+    round(float(gdf["geometry_area_km2"].max()), 3)
+)
+print(
+    "Mean hotspot area km2:",
+    round(float(gdf["geometry_area_km2"].mean()), 4)
+)
+
+print()
+print("===== TOP 10 IMPACT AREAS =====")
+cols = [
+    "impact_rank",
+    "geometry_area_km2",
+    "mean_ndvi",
+    "severity",
+    "priority",
+    "impact_score"
+]
+
+available = [c for c in cols if c in gdf.columns]
+
+print(
+    gdf[available]
+    .head(10)
+    .to_string(index=False)
+)
+
+print()
+print("Output:", OUTPUT)
+print("IMPACT FOUNDATION ENGINE COMPLETE")
+
+
+===== engines\risk_intelligence_engine.py =====
+
+import geopandas as gpd
+import numpy as np
+import os
+
+INPUT = "data/ndvi/vegetation_stress_impact.geojson"
+OUTPUT = "data/ndvi/vegetation_risk_intelligence.geojson"
+
+print("===== GEOSHIELD RISK INTELLIGENCE ENGINE =====")
+
+gdf = gpd.read_file(INPUT)
+
+print("Input:", INPUT)
+print("Hotspots loaded:", len(gdf))
+print("CRS:", gdf.crs)
+
+# ---------------------------------------------------------
+# NORMALIZE IMPACT SCORE
+# ---------------------------------------------------------
+
+impact_min = gdf["impact_score"].min()
+impact_max = gdf["impact_score"].max()
+
+if impact_max > impact_min:
+    gdf["impact_normalized"] = (
+        (gdf["impact_score"] - impact_min)
+        / (impact_max - impact_min)
+    )
+else:
+    gdf["impact_normalized"] = 0.0
+
+# ---------------------------------------------------------
+# NDVI STRESS COMPONENT
+# Lower NDVI = greater vegetation stress
+# ---------------------------------------------------------
+
+gdf["ndvi_stress"] = np.clip(
+    (0.20 - gdf["mean_ndvi"]) / 1.20,
+    0,
+    1
+)
+
+# ---------------------------------------------------------
+# AREA COMPONENT
+# Larger affected areas receive greater risk weight
+# ---------------------------------------------------------
+
+area_max = gdf["geometry_area_km2"].max()
+
+if area_max > 0:
+    gdf["area_normalized"] = (
+        gdf["geometry_area_km2"] / area_max
+    )
+else:
+    gdf["area_normalized"] = 0.0
+
+# ---------------------------------------------------------
+# RISK SCORE
+# ---------------------------------------------------------
+
+gdf["risk_score"] = (
+    gdf["impact_normalized"] * 0.50
+    + gdf["ndvi_stress"] * 0.35
+    + gdf["area_normalized"] * 0.15
+) * 100
+
+# ---------------------------------------------------------
+# RISK CLASSIFICATION
+# ---------------------------------------------------------
+
+def classify_risk(score):
+    if score >= 80:
+        return "EXTREME"
+    elif score >= 60:
+        return "HIGH"
+    elif score >= 40:
+        return "MODERATE"
+    elif score >= 20:
+        return "LOW"
+    else:
+        return "MINIMAL"
+
+gdf["risk_class"] = gdf["risk_score"].apply(classify_risk)
+
+# ---------------------------------------------------------
+# OPERATIONAL ACTION
+# ---------------------------------------------------------
+
+def action_for_risk(risk):
+    if risk == "EXTREME":
+        return "IMMEDIATE_FIELD_ASSESSMENT"
+    elif risk == "HIGH":
+        return "PRIORITY_MONITORING"
+    elif risk == "MODERATE":
+        return "ENHANCED_MONITORING"
+    elif risk == "LOW":
+        return "ROUTINE_MONITORING"
+    else:
+        return "NO_IMMEDIATE_ACTION"
+
+gdf["recommended_action"] = gdf["risk_class"].apply(
+    action_for_risk
+)
+
+# ---------------------------------------------------------
+# RANK
+# ---------------------------------------------------------
+
+gdf = gdf.sort_values(
+    "risk_score",
+    ascending=False
+).reset_index(drop=True)
+
+gdf["risk_rank"] = np.arange(1, len(gdf) + 1)
+
+# ---------------------------------------------------------
+# SUMMARY
+# ---------------------------------------------------------
+
+print()
+print("===== RISK SUMMARY =====")
+
+print("Total hotspots:", len(gdf))
+print(
+    "Mean risk score:",
+    round(float(gdf["risk_score"].mean()), 3)
+)
+
+print(
+    "Maximum risk score:",
+    round(float(gdf["risk_score"].max()), 3)
+)
+
+print()
+print("===== RISK DISTRIBUTION =====")
+print(gdf["risk_class"].value_counts())
+
+print()
+print("===== TOP 10 RISK AREAS =====")
+
+cols = [
+    "risk_rank",
+    "geometry_area_km2",
+    "mean_ndvi",
+    "impact_score",
+    "risk_score",
+    "risk_class",
+    "recommended_action"
+]
+
+print(
+    gdf[cols]
+    .head(10)
+    .to_string(index=False)
+)
+
+# ---------------------------------------------------------
+# OUTPUT
+# ---------------------------------------------------------
+
+os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
+
+gdf.to_file(
+    OUTPUT,
+    driver="GeoJSON"
+)
+
+print()
+print("Output:", OUTPUT)
+print("RISK INTELLIGENCE ENGINE COMPLETE")
+
+
+===== engines\risk_alert_engine.py =====
+
+import geopandas as gpd
+import os
+from datetime import datetime, timezone
+
+INPUT = "data/ndvi/vegetation_risk_intelligence.geojson"
+OUTPUT = "data/ndvi/geoshield_risk_alerts.geojson"
+
+print("===== GEOSHIELD RISK ALERT ENGINE =====")
+
+gdf = gpd.read_file(INPUT)
+
+print("Input:", INPUT)
+print("Risk areas loaded:", len(gdf))
+print("CRS:", gdf.crs)
+
+# ---------------------------------------------------------
+# ALERT CLASSIFICATION
+# ---------------------------------------------------------
+
+def alert_level(row):
+
+    risk = float(row["risk_score"])
+
+    if risk >= 60:
+        return "CRITICAL"
+
+    elif risk >= 40:
+        return "HIGH"
+
+    elif risk >= 20:
+        return "WATCH"
+
+    else:
+        return "INFORMATIONAL"
+
+
+def alert_action(level):
+
+    if level == "CRITICAL":
+        return "IMMEDIATE_RESPONSE"
+
+    elif level == "HIGH":
+        return "FIELD_ASSESSMENT"
+
+    elif level == "WATCH":
+        return "ENHANCED_MONITORING"
+
+    else:
+        return "ROUTINE_MONITORING"
+
+
+def alert_message(level):
+
+    if level == "CRITICAL":
+        return "Severe vegetation stress detected. Immediate assessment recommended."
+
+    elif level == "HIGH":
+        return "Significant vegetation stress detected. Field assessment recommended."
+
+    elif level == "WATCH":
+        return "Vegetation stress detected. Enhanced monitoring recommended."
+
+    else:
+        return "Vegetation condition within low-risk range."
+
+
+# ---------------------------------------------------------
+# GENERATE ALERT ATTRIBUTES
+# ---------------------------------------------------------
+
+gdf["alert_level"] = gdf.apply(
+    alert_level,
+    axis=1
+)
+
+gdf["alert_action"] = gdf["alert_level"].apply(
+    alert_action
+)
+
+gdf["alert_message"] = gdf["alert_level"].apply(
+    alert_message
+)
+
+gdf["alert_id"] = [
+    f"GS-{i:06d}"
+    for i in range(1, len(gdf) + 1)
+]
+
+gdf["alert_timestamp"] = datetime.now(
+    timezone.utc
+).isoformat()
+
+# ---------------------------------------------------------
+# PRIORITY ORDER
+# ---------------------------------------------------------
+
+priority_order = {
+    "CRITICAL": 1,
+    "HIGH": 2,
+    "WATCH": 3,
+    "INFORMATIONAL": 4
+}
+
+gdf["alert_priority"] = gdf["alert_level"].map(
+    priority_order
+)
+
+gdf = gdf.sort_values(
+    ["alert_priority", "risk_score"],
+    ascending=[True, False]
+).reset_index(drop=True)
+
+gdf["alert_rank"] = range(
+    1,
+    len(gdf) + 1
+)
+
+# ---------------------------------------------------------
+# SUMMARY
+# ---------------------------------------------------------
+
+print()
+print("===== ALERT SUMMARY =====")
+
+print(
+    "Total alerts:",
+    len(gdf)
+)
+
+print()
+print("===== ALERT DISTRIBUTION =====")
+
+print(
+    gdf["alert_level"].value_counts()
+)
+
+# ---------------------------------------------------------
+# TOP ALERTS
+# ---------------------------------------------------------
+
+print()
+print("===== TOP 10 ALERTS =====")
+
+columns = [
+    "alert_rank",
+    "alert_id",
+    "geometry_area_km2",
+    "mean_ndvi",
+    "risk_score",
+    "risk_class",
+    "alert_level",
+    "alert_action"
+]
+
+print(
+    gdf[columns]
+    .head(10)
+    .to_string(index=False)
+)
+
+# ---------------------------------------------------------
+# OUTPUT
+# ---------------------------------------------------------
+
+os.makedirs(
+    os.path.dirname(OUTPUT),
+    exist_ok=True
+)
+
+gdf.to_file(
+    OUTPUT,
+    driver="GeoJSON"
+)
+
+print()
+print("Output:", OUTPUT)
+print("RISK ALERT ENGINE COMPLETE")
+
+
+===== engines\sentinel2_connector.py =====
+
+import os
+import sys
+import httpx
+from datetime import datetime, timedelta, timezone
+
+# ============================================================
+# GEOSHIELD SENTINEL-2 CONNECTOR
+# Copernicus Data Space Ecosystem
+# ============================================================
+
+TOKEN_URL = (
+    "https://identity.dataspace.copernicus.eu/"
+    "auth/realms/CDSE/protocol/openid-connect/token"
+)
+
+CATALOG_URL = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products"
+
+CLIENT_ID = "cdse-public"
+
+USERNAME = os.getenv("CDSE_USERNAME")
+PASSWORD = os.getenv("CDSE_PASSWORD")
+
+
+def authenticate():
+    print("===== GEOSHIELD SENTINEL-2 CONNECTOR =====")
+    print("Authenticating with Copernicus Data Space...")
+
+    if not USERNAME or not PASSWORD:
+        print()
+        print("ERROR: CDSE credentials are not set.")
+        print()
+        print("Set them in PowerShell first:")
+        print('$env:CDSE_USERNAME="your_email"')
+        print('$env:CDSE_PASSWORD="your_password"')
+        sys.exit(1)
+
+    response = httpx.post(
+        TOKEN_URL,
+        data={
+            "grant_type": "password",
+            "client_id": CLIENT_ID,
+            "username": USERNAME,
+            "password": PASSWORD,
+        },
+        timeout=60,
+    )
+
+    print("AUTH:", response.status_code)
+
+    response.raise_for_status()
+
+    token = response.json().get("access_token")
+
+    if not token:
+        print("ERROR: Authentication succeeded but no token was returned.")
+        sys.exit(1)
+
+    print("TOKEN: True")
+    return token
+
+
+def search_sentinel2(
+    token,
+    start_date,
+    end_date,
+    tile="T37MBU",
+    cloud_cover=20,
+    limit=10,
+):
+    print()
+    print("===== SENTINEL-2 SEARCH =====")
+    print("Tile:", tile)
+    print("Start:", start_date)
+    print("End:", end_date)
+    print("Maximum cloud cover:", cloud_cover, "%")
+
+    # Sentinel-2 Level-2A products
+    filter_expression = (
+        "Collection/Name eq 'SENTINEL-2' "
+        "and contains(Name,'MSIL2A') "
+        f"and contains(Name,'{tile}') "
+        f"and ContentDate/Start gt {start_date}T00:00:00.000Z "
+        f"and ContentDate/Start lt {end_date}T23:59:59.999Z "
+        f"and Attributes/OData.CSC.DoubleAttribute/any("
+        "att:att/Name eq 'cloudCover' "
+        f"and att/att/Value le {cloud_cover})"
+    )
+
+    params = {
+        "$filter": filter_expression,
+        "$orderby": "ContentDate/Start desc",
+        "$top": limit,
+    }
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
+
+    response = httpx.get(
+        CATALOG_URL,
+        params=params,
+        headers=headers,
+        timeout=120,
+    )
+
+    print("CATALOG HTTP:", response.status_code)
+
+    response.raise_for_status()
+
+    products = response.json().get("value", [])
+
+    print("Products found:", len(products))
+
+    return products
+
+
+def print_products(products):
+    print()
+
+    if not products:
+        print("No suitable Sentinel-2 products found.")
+        return
+
+    print("===== AVAILABLE SENTINEL-2 PRODUCTS =====")
+
+    for index, product in enumerate(products, start=1):
+        name = product.get("Name")
+        product_id = product.get("Id")
+        online = product.get("Online")
+
+        content_date = product.get("ContentDate", {})
+        acquisition = content_date.get("Start")
+
+        print()
+        print(f"[{index}]")
+        print("Name:", name)
+        print("UUID:", product_id)
+        print("Acquisition:", acquisition)
+        print("Online:", online)
+
+
+def main():
+    token = authenticate()
+
+    today = datetime.now(timezone.utc).date()
+
+    # Search the previous 30 days automatically.
+    start_date = today - timedelta(days=30)
+    end_date = today
+
+    products = search_sentinel2(
+        token=token,
+        start_date=start_date.isoformat(),
+        end_date=end_date.isoformat(),
+        tile="T37MBU",
+        cloud_cover=20,
+        limit=10,
+    )
+
+    print_products(products)
+
+    print()
+    print("===== CONNECTOR STATUS =====")
+
+    if products:
+        print("Sentinel-2 connection: READY")
+        print("Automatic scene discovery: READY")
+    else:
+        print("Sentinel-2 connection: AUTHENTICATED")
+        print("Automatic scene discovery: NO PRODUCTS FOUND")
+
+    print()
+    print("SENTINEL-2 CONNECTOR COMPLETE")
+
+
+if __name__ == "__main__":
+    main()
+
+
+===== engines\sentinel2_downloader.py =====
+
+"""
+GeoShield AI Enterprise
+Sentinel-2 Product Downloader
+
+Uses centralized GeoShield configuration and authentication.
+Credentials are never hard-coded.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import httpx
+
+from core.auth import CopernicusAuthManager
+from core.config import settings
+
+
+DOWNLOAD_URL = (
+    "https://download.dataspace.copernicus.eu/"
+    "odata/v1/Products"
+)
+
+OUTPUT_DIR = Path("data/sentinel2")
+
+
+class Sentinel2Downloader:
+    """Download Sentinel-2 products from Copernicus Data Space."""
+
+    def __init__(
+        self,
+        auth_manager: CopernicusAuthManager | None = None,
+        timeout: float = 600.0,
+    ) -> None:
+
+        self.auth_manager = (
+            auth_manager
+            or CopernicusAuthManager()
+        )
+
+        self.timeout = timeout
+
+    def download_product(
+        self,
+        product_uuid: str,
+        output_dir: Path | None = None,
+    ) -> Path:
+        """
+        Download a Copernicus product by UUID.
+
+        Returns:
+            Path to downloaded product.
+        """
+
+        if not product_uuid.strip():
+            raise ValueError(
+                "product_uuid cannot be empty."
+            )
+
+        destination = (
+            output_dir
+            or OUTPUT_DIR
+        )
+
+        destination.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        output_file = (
+            destination
+            / f"{product_uuid}.zip"
+        )
+
+        token = self.auth_manager.get_token()
+
+        url = (
+            f"{DOWNLOAD_URL}"
+            f"({product_uuid})"
+            f"/$value"
+        )
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/octet-stream",
+            "User-Agent": "GeoShield-AI/0.1",
+        }
+
+        print(
+            "===== GEOSHIELD SENTINEL-2 DOWNLOAD ====="
+        )
+        print(
+            f"Product UUID: {product_uuid}"
+        )
+        print(
+            f"Destination: {output_file}"
+        )
+        print()
+        print(
+            "Connecting to Copernicus download service..."
+        )
+
+        with httpx.stream(
+            "GET",
+            url,
+            headers=headers,
+            timeout=self.timeout,
+            follow_redirects=True,
+        ) as response:
+
+            print(
+                f"DOWNLOAD HTTP: {response.status_code}"
+            )
+
+            print(
+                "Content-Type:",
+                response.headers.get(
+                    "content-type"
+                ),
+            )
+
+            response.raise_for_status()
+
+            total = int(
+                response.headers.get(
+                    "content-length",
+                    "0",
+                )
+            )
+
+            downloaded = 0
+
+            with open(
+                output_file,
+                "wb",
+            ) as file:
+
+                for chunk in response.iter_bytes(
+                    chunk_size=1024 * 1024,
+                ):
+
+                    if not chunk:
+                        continue
+
+                    file.write(chunk)
+
+                    downloaded += len(chunk)
+
+                    if total:
+                        percent = (
+                            downloaded
+                            / total
+                            * 100
+                        )
+
+                        print(
+                            f"\rDownloaded: "
+                            f"{downloaded / 1024 / 1024:.1f} MB "
+                            f"({percent:.1f}%)",
+                            end="",
+                        )
+
+                    else:
+
+                        print(
+                            f"\rDownloaded: "
+                            f"{downloaded / 1024 / 1024:.1f} MB",
+                            end="",
+                        )
+
+        print()
+        print()
+        print(
+            "===== DOWNLOAD COMPLETE ====="
+        )
+
+        print(
+            f"File: {output_file}"
+        )
+
+        print(
+            f"Size: "
+            f"{output_file.stat().st_size:,} bytes"
+        )
+
+        return output_file
+
+
+def main() -> None:
+    """
+    Manual downloader entry point.
+
+    Replace PRODUCT_UUID with a real UUID returned
+    by the Sentinel-2 catalogue search.
+    """
+
+    product_uuid = os.getenv(
+        "GEOSHIELD_TEST_PRODUCT_UUID",
+        "",
+    ).strip()
+
+    if not product_uuid:
+
+        raise RuntimeError(
+            "GEOSHIELD_TEST_PRODUCT_UUID is not set."
+        )
+
+    downloader = Sentinel2Downloader()
+
+    downloader.download_product(
+        product_uuid,
+    )
+
+
+if __name__ == "__main__":
+    main()
+
+===== connectors\earth_engine\__init__.py =====
+
+
+===== connectors\earth_engine\connector.py =====
+
+
+===== backend\api\main_engine_api.py =====
+
+from __future__ import annotations
+from fastapi import APIRouter, Query
+from core.engines.main_engine import main_engine
+
+router = APIRouter(prefix="/api/main-engine", tags=["main-engine"])
+
+@router.get("/status")
+def status():
+    return main_engine.get_system_status()
+
+@router.get("/tile-layer")
+def tile_layer(layer: str = Query(default="TRUE-COLOR-S2L2A")):
+    return main_engine.get_live_tile_layer(layer=layer)
+
+@router.get("/viirs-hotspots")
+def viirs_hotspots(day_range: int = Query(default=1)):
+    return main_engine.get_viirs_hotspots(day_range=day_range)
+
+@router.get("/gpm-rainfall")
+def gpm_rainfall():
+    return main_engine.get_gpm_rainfall()
+
+@router.get("/era5-weather")
+def era5_weather():
+    return main_engine.get_era5_weather()
+
+@router.get("/resources")
+def resources(county: str | None = Query(default=None)):
+    return main_engine.get_resources(county=county)
+
+@router.get("/hazard/{hazard}")
+def hazard_summary(hazard: str, county: str | None = Query(default=None)):
+    return main_engine.get_hazard_summary(hazard=hazard, county=county)
+
+
+
+
+
+
+===== backend\services\earthquake.py =====
+
+import requests
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+USGS_URL = (
+    "https://earthquake.usgs.gov/earthquakes/feed/v1.0/"
+    "summary/all_day.geojson"
+)
+
+def get_earthquakes():
+    try:
+        response = requests.get(
+            USGS_URL,
+            timeout=10,
+            verify=False,
+            headers={
+                "User-Agent": "GeoShield-AI/1.0"
+            }
+        )
+
+        data = response.json()
+
+        earthquakes = []
+
+        for feature in data["features"]:
+
+            prop = feature["properties"]
+            geo = feature["geometry"]
+
+            earthquakes.append({
+                "place": prop["place"],
+                "magnitude": prop["mag"],
+                "time": prop["time"],
+                "coordinates": geo["coordinates"]
+            })
+
+        return earthquakes
+
+    except Exception as e:
+        return {"error": str(e)}
+
+===== backend\spatial\query_engine.py =====
+
+from backend.spatial.data_manager import GeoDataManager
+from backend.spatial.spatial_engine import SpatialEngine
+
+
+class SpatialQueryEngine:
+
+    def __init__(self):
+
+        self.data_manager = GeoDataManager()
+
+        self.data_manager.load_layer(
+            "counties",
+            "data/boundaries/Kenya_county.shp"
+        )
+
+        self.data_manager.load_layer(
+            "roads",
+            "data/roads/ken_roads.shp"
+        )
+
+        self.engine = SpatialEngine(self.data_manager)
+
+    def query_location(self, longitude, latitude):
+
+        county = self.engine.locate_point(longitude, latitude)
+        road = self.engine.nearest_road(longitude, latitude)
+
+        return {
+            "longitude": longitude,
+            "latitude": latitude,
+            "county": county["COUNTY"].iloc[0],
+            "nearest_road": road["ROAD_NAME"] if "ROAD_NAME" in road else "Unknown"
+        }
+
+===== backend\spatial\spatial_engine.py =====
+
+from shapely.geometry import Point
+import geopandas as gpd
+
+
+class SpatialEngine:
+
+    def __init__(self, data_manager):
+        self.data_manager = data_manager
+
+    def get_layer(self, name):
+        return self.data_manager.get_layer(name)
+
+    def find_county(self, county_name):
+        counties = self.get_layer("counties")
+        return counties[counties["COUNTY"] == county_name]
+
+    def locate_point(self, longitude, latitude):
+        counties = self.get_layer("counties")
+
+        point = Point(longitude, latitude)
+
+        result = counties[counties.contains(point)]
+
+        return result
+
+    def nearest_road(self, longitude, latitude):
+
+        roads = self.get_layer("roads")
+
+        # Reproject roads to Kenya UTM Zone 37S
+        roads_projected = roads.to_crs(epsg=32737)
+
+        # Create the query point
+        point = gpd.GeoSeries(
+            [Point(longitude, latitude)],
+            crs="EPSG:4326"
+        ).to_crs(epsg=32737)
+
+        # Compute distances in meters
+        distances = roads_projected.distance(point.iloc[0])
+
+        # Return the nearest road from the original layer
+        nearest = roads.iloc[distances.idxmin()]
+
+        return nearest
+
+===== backend\disaster\disaster_engine.py =====
+
+class DisasterEngine:
+
+    def __init__(self):
+        self.active_disasters = []
+
+    def add_disaster(self, disaster):
+
+        self.active_disasters.append(disaster)
+
+    def list_disasters(self):
+
+        return self.active_disasters
+
+===== backend\disaster\test_fire_engine.py =====
+
+from backend.disaster.fire_engine import FireIntelligenceEngine
+
+engine = FireIntelligenceEngine()
+
+fires = engine.analyse(
+    "data/fires/kenya_fires.csv"
+)
+
+print(fires[:3])
+
+===== backend\disaster\fire_engine.py =====
+
+"""
+GeoShield Fire Intelligence Engine
+
+Processes fire events through spatial enrichment,
+risk assessment, and decision intelligence.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from backend.connectors.firms_connector import FIRMSConnector
+from backend.spatial.data_manager import GeoDataManager
+
+from core.decision_engine import DecisionEngine
+from core.event_enrichment import EventEnrichmentEngine
+from core.risk_engine import RiskEngine
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+class FireIntelligenceEngine:
+    """
+    Main fire intelligence processing engine.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the fire intelligence pipeline."""
+
+        self.connector = FIRMSConnector()
+
+        self.data_manager = GeoDataManager()
+
+        counties_path = (
+            PROJECT_ROOT
+            / "data"
+            / "boundaries"
+            / "Kenya_county.shp"
+        )
+
+        roads_path = (
+            PROJECT_ROOT
+            / "data"
+            / "roads"
+            / "ken_roads.shp"
+        )
+
+        self.data_manager.load_layer(
+            "counties",
+            str(counties_path),
+        )
+
+        self.data_manager.load_layer(
+            "roads",
+            str(roads_path),
+        )
+
+        self.enrichment = EventEnrichmentEngine(
+            self.data_manager
+        )
+
+        self.risk = RiskEngine()
+        self.decision = DecisionEngine()
+
+    def analyse(
+        self,
+        filepath: str,
+    ) -> list[dict[str, Any]]:
+        """
+        Analyze fire events from a CSV dataset.
+
+        Args:
+            filepath: Path to the fire-events CSV.
+
+        Returns:
+            Enriched fire intelligence records.
+        """
+
+        fire_path = Path(filepath)
+
+        if not fire_path.is_absolute():
+            fire_path = PROJECT_ROOT / fire_path
+
+        if not fire_path.exists():
+            raise FileNotFoundError(
+                f"Fire dataset not found: {fire_path}"
+            )
+
+        self.connector.load_csv(str(fire_path))
+
+        enriched: list[dict[str, Any]] = []
+
+        for fire in self.connector.get_disasters():
+            location = self.enrichment.enrich(
+                fire["longitude"],
+                fire["latitude"],
+            )
+
+            risk = self.risk.calculate_fire_risk(
+                fire
+            )
+
+            decision = self.decision.recommend(
+                risk
+            )
+
+            enriched.append(
+                {
+                    **fire,
+                    **location,
+                    **risk,
+                    **decision,
+                }
+            )
+
+        return enriched
+
+===== backend\main.py =====
+
+from fastapi import FastAPI, Depends
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, JSONResponse
+from sqlalchemy.orm import Session
+import os
+
+from backend.database import get_db
+import sqlite3
+from pathlib import Path as _Path
+from backend.models import TileModel
+from backend.api.satellites import router as satellites_router
+from backend.routes.dashboard import router as dashboard_router
+from backend.api.sentinel2_map_layer import router as sentinel2_map_layer_router
+from backend.api.main_engine_api import router as main_engine_router
+from backend.routes.county import router as county_router
+
+app = FastAPI(title="GeoShield AI Enterprise", version="1.3.1")
+
+# Mount static files and templates correctly from your original project structure
+if os.path.exists("frontend/static"):
+    app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
+
+app.include_router(satellites_router)
+app.include_router(dashboard_router, prefix="/api")
+app.include_router(sentinel2_map_layer_router)
+app.include_router(main_engine_router)
+app.include_router(county_router)
+
+@app.get("/api/latest-tile")
+def get_latest_tile(db: Session = Depends(get_db)):
+    tile = db.query(TileModel).order_by(TileModel.updated_at.desc()).first()
+    if not tile:
+        return {"tile_id": "T37MBU", "scene_id": "S2A_MSIL2A_20260904T080451_N0512_R135_T37MBU_20260904T130611", "cloud_cover": 24.48, "updated_at": "2026-09-04 14:14:59"}
+    return {
+        "tile_id": tile.tile_id,
+        "scene_id": tile.current_scene_id,
+        "cloud_cover": tile.current_cloud_cover,
+        "updated_at": str(tile.updated_at)
+    }
+
+@app.get("/", response_class=HTMLResponse)
+@app.get("/dashboard", response_class=HTMLResponse)
+def serve_dashboard():
+    index_path = "frontend/templates/index.html"
+    if os.path.exists(index_path):
+        with open(index_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "<h3>Frontend template not found at frontend/templates/index.html</h3>"
+
+
+@app.get("/api/sentinel2/search")
+def search_sentinel2(bbox: str = None, cloud_cover: int = 30, limit: int = 20):
+    return {"results": [], "status": "success", "bbox": bbox}
+
+@app.get("/resources/{county_name}")
+def get_county_resources(county_name: str):
+    db_path = _Path("database/geoshield.db")
+    if not db_path.exists():
+        return []
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT name, category, county, latitude, longitude, status, capacity, contact "
+        "FROM infrastructure WHERE county = ?",
+        (county_name,),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [dict(row) for row in rows]
+
+@app.get("/alerts")
+def get_alerts():
+    return [{"id": 1, "message": "No critical anomalies detected in Nairobi region", "severity": "info"}]
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "system": "GeoShield OS Operational"}
+
+
+
+===== frontend\static\fireengine.js =====
+
+/* GeoShield AI -- Fire Engine (VIIRS live primary + ERA5/GPM live context via Main Engine) */
+window.GeoShieldFire = {
+
+    map: null,
+    satelliteLayer: null,
+    streetLayer: null,
+    countyLayer: null,
+    hotspotLayer: null,
+    initialized: false,
+
+    init() {
+        if (this.initialized) {
+            if (this.map) this.map.invalidateSize();
+            return;
+        }
+        this.initialized = true;
+
+        setTimeout(() => {
+            if (this.map) return;
+
+            this.map = L.map("fireMap", { zoomControl: true }).setView([0.5, 37.5], 6);
+
+            this.streetLayer = L.tileLayer(
+                "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                { attribution: "&copy; OpenStreetMap contributors" }
+            );
+
+            this.hotspotLayer = L.layerGroup();
+
+            this.loadSatelliteLayer();
+            this.loadCountyFireLayer();
+            this.loadViirsHotspots();
+            this.loadSummary();
+
+            const searchInput = document.getElementById("fireSearchInput");
+            if (searchInput) {
+                searchInput.addEventListener("keydown", (e) => {
+                    if (e.key === "Enter") this.searchLocation(searchInput.value);
+                });
+            }
+
+            document.querySelectorAll('input[name="fireMapView"]').forEach(radio => {
+                radio.addEventListener("change", (e) => {
+                    this.switchView(e.target.value);
+                });
+            });
+
+            this.map.invalidateSize();
+            console.log("GeoShield Fire Engine initialized (Main Engine connected)");
+        }, 50);
+    },
+
+    async loadSatelliteLayer() {
+        try {
+            const res = await fetch("/api/main-engine/tile-layer");
+            const data = await res.json();
+
+            if (data.mode === "live") {
+                this.satelliteLayer = L.tileLayer.wms(data.tile_url_template, {
+                    layers: data.wms_layer,
+                    format: "image/png",
+                    transparent: true,
+                    minZoom: 7,
+                    maxZoom: 14,
+                    attribution: "Copernicus Sentinel-2 / Sentinel Hub"
+                });
+            } else {
+                this.satelliteLayer = L.tileLayer(data.tile_url_template, {
+                    attribution: "Placeholder tiles (Sentinel-2 not authenticated)"
+                });
+            }
+
+            this.satelliteLayer.addTo(this.map);
+        } catch (error) {
+            console.error("[Fire] satellite layer failed:", error);
+        }
+    },
+
+    async loadCountyFireLayer() {
+        try {
+            const [geoRes, countiesRes, era5Res] = await Promise.all([
+                fetch("/static/data/kenya_counties.geojson"),
+                fetch("/counties"),
+                fetch("/api/main-engine/era5-weather")
+            ]);
+            const data = await geoRes.json();
+            const countiesList = await countiesRes.json();
+            const era5Data = await era5Res.json();
+            const era5Counties = era5Data.counties || {};
+
+            const countyLookup = {};
+            countiesList.forEach(c => { countyLookup[c.County] = c; });
+            this.countyLookup = countyLookup;
+
+            const fireRiskLabel = (droughtRisk) => {
+                if (droughtRisk >= 70) return "HIGH";
+                if (droughtRisk >= 40) return "MEDIUM";
+                return "LOW";
+            };
+
+            this.countyLayer = L.geoJSON(data, {
+                style: (feature) => {
+                    const county = feature.properties.COUNTY || feature.properties.NAME || feature.properties.name || "Unknown";
+                    const info = countyLookup[county];
+                    const risk = info ? Number(info.Drought_Risk || 0) : 0;
+                    let fill = "#2ecc71";
+                    if (risk >= 40) fill = "#f1c40f";
+                    if (risk >= 70) fill = "#e74c3c";
+                    return { color: "#55ffff", weight: 1, fillColor: fill, fillOpacity: 0.4 };
+                },
+                onEachFeature: (feature, layer) => {
+                    const county = feature.properties.COUNTY || feature.properties.NAME || feature.properties.name || "Unknown";
+
+                    layer.on({
+                        mouseover: (e) => e.target.setStyle({ weight: 3, color: "#00ff88", fillOpacity: 0.55 }),
+                        mouseout: (e) => this.countyLayer.resetStyle(e.target),
+                        click: () => {
+                            const info = countyLookup[county];
+                            if (!info) return;
+
+                            const risk = fireRiskLabel(Number(info.Drought_Risk));
+                            const era5 = era5Counties[county];
+                            const tempLine = era5 ? `${era5.temperature_c} \u00b0C (live)` : "unavailable";
+
+                            layer.bindPopup(`
+                                <b>${info.County}</b>
+                                <hr>
+                                \ud83c\udf3f NDVI (vegetation dryness): ${Number(info.NDVI).toFixed(2)}<br>
+                                \ud83d\udd25 Fire Risk: ${risk}<br>
+                                \ud83c\udf21\ufe0f Temperature (ERA5 live): ${tempLine}
+                            `).openPopup();
+
+                            const tempNote = document.getElementById("fireTempNote");
+                            if (tempNote) tempNote.innerText = `${county}: ${tempLine}`;
+
+                            this.map.fitBounds(layer.getBounds(), { padding: [20, 20], maxZoom: 9 });
+                        }
+                    });
+                }
+            }).addTo(this.map);
+
+            this.map.fitBounds(this.countyLayer.getBounds(), { padding: [10, 10] });
+
+        } catch (error) {
+            console.error("[Fire] county layer failed:", error);
+        }
+    },
+
+    async loadViirsHotspots() {
+        try {
+            const res = await fetch("/api/main-engine/viirs-hotspots");
+            const data = await res.json();
+
+            this.hotspotLayer.clearLayers();
+
+            (data.hotspots || []).forEach(h => {
+                const frp = parseFloat(h.frp) || 0;
+                let color = "#FFD400";
+                let radius = 6;
+                if (frp >= 2) { color = "#FF8C00"; radius = 8; }
+                if (frp >= 5) { color = "#FF3B30"; radius = 11; }
+
+                L.circleMarker([parseFloat(h.latitude), parseFloat(h.longitude)], {
+                    radius: radius,
+                    color: "#8B0000",
+                    fillColor: color,
+                    fillOpacity: 0.9,
+                    weight: 2
+                }).bindPopup(`\ud83d\udd25 Active fire (VIIRS)<br>FRP: ${h.frp}<br>Brightness: ${h.bright_ti4}<br>Detected: ${h.acq_date}`)
+                  .addTo(this.hotspotLayer);
+            });
+
+            this.hotspotLayer.addTo(this.map);
+
+            const countEl = document.getElementById("fireHotspotCount");
+            if (countEl) countEl.innerText = data.count ?? "--";
+
+            const info = document.getElementById("fireSceneInfo");
+            if (info) info.innerText = `Fire intelligence -- checked ${new Date(data.checked_at).toLocaleString()}`;
+
+        } catch (error) {
+            console.error("[Fire] VIIRS hotspots failed:", error);
+        }
+    },
+
+    async loadSummary() {
+        try {
+            const res = await fetch("/summary");
+            const data = await res.json();
+            const el = document.getElementById("fireHighestRiskCounty");
+            if (el && data.highest_drought) {
+                el.innerText = `${data.highest_drought.County} (${Number(data.highest_drought.Drought_Risk).toFixed(1)}% dryness)`;
+            }
+        } catch (error) {
+            console.error("[Fire] summary failed:", error);
+        }
+    },
+
+    async searchLocation(query) {
+        if (!query || !query.trim()) return;
+        try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`);
+            const results = await res.json();
+            if (!results.length) {
+                alert("Location not found: " + query);
+                return;
+            }
+            const { lat, lon } = results[0];
+            this.map.setView([parseFloat(lat), parseFloat(lon)], 10);
+        } catch (error) {
+            console.error("[Fire] search failed:", error);
+        }
+    },
+
+    switchView(mode) {
+        if (mode === "street") {
+            if (this.satelliteLayer) this.map.removeLayer(this.satelliteLayer);
+            this.streetLayer.addTo(this.map);
+        } else {
+            if (this.streetLayer) this.map.removeLayer(this.streetLayer);
+            if (this.satelliteLayer) this.satelliteLayer.addTo(this.map);
+        }
+    },
+
+    refreshIfVisible() {
+        if (this.map) {
+            window.dispatchEvent(new Event("resize"));
+            this.map.invalidateSize();
+        }
+    }
+};
+
+
+===== tests\core\hazards\test_hazard_engine.py =====
+
+from core.hazards.hazard_engine import HazardEngine
+
+
+def test_hazard_engine_detects_drought():
+
+    engine = HazardEngine()
+
+    result = engine.analyze(
+        ndvi=0.1,
+        ndwi=0.1,
+        ndbi=0.1,
+        savi=0.1,
+        environmental_score=20,
+    )
+
+    assert "Drought" in result["hazards"]
+    assert "Drought" in result["hazard_results"]
+
+
+def test_hazard_engine_detects_flood():
+
+    engine = HazardEngine()
+
+    result = engine.analyze(
+        ndvi=0.5,
+        ndwi=0.6,
+        ndbi=0.1,
+        savi=0.4,
+        environmental_score=50,
+    )
+
+    assert "Flood" in result["hazards"]
+
+===== tests\core\test_spectral_engine.py =====
+
+from core.indices.spectral_engine import SpectralEngine
+from core.indices.spectral_input import SpectralInput
+
+
+def test_spectral_engine():
+
+    data = SpectralInput(
+        red=0.20,
+        green=0.30,
+        nir=0.70,
+        swir=0.40,
+    )
+
+    engine = SpectralEngine()
+
+    report = engine.analyze(data)
+
+    assert "NDVI" in report.values
+    assert "NDWI" in report.values
+    assert "NDBI" in report.values
+    assert "SAVI" in report.values
+
+    assert "NDVI" in report.classifications
+    assert "NDWI" in report.classifications
+    assert "NDBI" in report.classifications
+    assert "SAVI" in report.classifications
+
+===== tests\core\test_environmental_engine.py =====
+
+from core.indices.environmental_engine import EnvironmentalEngine
+
+
+def test_environmental_engine():
+
+    engine = EnvironmentalEngine()
+
+    result = engine.analyze(
+        ndvi=0.6,
+        ndbi=0.2,
+        ndwi=0.4,
+        savi=0.5,
+    )
+
+    assert "indices" in result
+    assert "classifications" in result
+    assert "environmental_score" in result
+    assert "report" in result
+
+    assert result["indices"]["ndvi"] == 0.6
+    assert result["indices"]["ndbi"] == 0.2
+    assert result["indices"]["ndwi"] == 0.4
+    assert result["indices"]["savi"] == 0.5
+
+    assert isinstance(result["environmental_score"], float)
+    assert 0 <= result["environmental_score"] <= 100
+
+===== tests\satellites\test_search_engine.py =====
+
+from engines.satellite_search_engine import SatelliteSearchEngine
+
+
+def test_search_engine():
+
+    engine = SatelliteSearchEngine()
+
+    results = engine.search_all(
+        latitude=-1.2921,
+        longitude=36.8219,
+        start_date="2026-08-01",
+        end_date="2026-08-03",
+        limit=5,
+    )
+
+    assert len(results) > 0
+
+    print("\nReturned Products:\n")
+
+    for item in results:
+
+        print(item)
+
+    print("\nSatellite Search Engine Passed\n")
+
+===== patch_mainengine_include.py =====
+
+from pathlib import Path
+
+path = Path("backend/main.py")
+src = path.read_text(encoding="utf-8-sig")
+original = src
+
+old_import = "from backend.api.sentinel2_map_layer import router as sentinel2_map_layer_router"
+new_import = "from backend.api.sentinel2_map_layer import router as sentinel2_map_layer_router\nfrom backend.api.main_engine_api import router as main_engine_router"
+if old_import not in src:
+    raise SystemExit("ERROR: sentinel2_map_layer import not found -- printing file:\n" + src)
+src = src.replace(old_import, new_import)
+
+old_include = "app.include_router(sentinel2_map_layer_router)"
+new_include = "app.include_router(sentinel2_map_layer_router)\napp.include_router(main_engine_router)"
+if old_include not in src:
+    raise SystemExit("ERROR: sentinel2_map_layer include not found -- printing file:\n" + src)
+src = src.replace(old_include, new_include)
+
+if src == original:
+    print("No changes were necessary (already patched?).")
+else:
+    path.write_text(src, encoding="utf-8", newline="\n")
+    print("main.py patched -- Main Engine API now included at /api/main-engine/*.")
+

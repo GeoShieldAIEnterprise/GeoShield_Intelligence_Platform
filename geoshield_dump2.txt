@@ -1,0 +1,1179 @@
+﻿===== TARGETED DUMP: connectors, enrichment, config, data manager =====
+
+===== core\connectors\connector_registry.py =====
+
+"""
+GeoShield Connector Registry
+
+Maintains all available external data connectors.
+"""
+
+from .base_connector import BaseConnector
+
+
+class ConnectorRegistry:
+    """
+    Registry for GeoShield data connectors.
+    """
+
+    def __init__(self) -> None:
+        self._connectors: dict[str, BaseConnector] = {}
+
+    def register(self, connector: BaseConnector) -> None:
+        """Register a connector."""
+
+        self._connectors[connector.provider_name] = connector
+
+    def get(self, provider_name: str) -> BaseConnector | None:
+        """Retrieve a connector by provider name."""
+
+        return self._connectors.get(provider_name)
+
+    def list(self) -> list[BaseConnector]:
+        """Return all registered connectors."""
+
+        return list(self._connectors.values())
+
+    def count(self) -> int:
+        """Return the number of registered connectors."""
+
+        return len(self._connectors)
+
+    def remove(self, provider_name: str) -> bool:
+        """Remove a connector from the registry."""
+
+        if provider_name not in self._connectors:
+            return False
+
+        del self._connectors[provider_name]
+        return True
+
+    def clear(self) -> None:
+        """Remove all registered connectors."""
+
+        self._connectors.clear()
+
+===== core\connectors\firms_connector.py =====
+
+"""
+GeoShield FIRMS Connector
+
+VIIRS active fire / thermal anomaly data via NASA FIRMS.
+Implements the standard GeoShield BaseConnector interface.
+
+Uses curl.exe (Windows Schannel) instead of Python's requests
+library: this machine's OpenSSL 3.0.20 hits SSLEOFError against
+several external HTTPS servers (confirmed with both Copernicus
+and NASA FIRMS), while curl/Schannel handles them without issue.
+"""
+
+from __future__ import annotations
+
+import csv
+import io
+import json
+import subprocess
+from typing import Any
+
+from core.config import settings
+from .base_connector import BaseConnector
+from .connector_config import ConnectorConfig
+from .connector_result import ConnectorResult
+
+FIRMS_AREA_BASE = "https://firms.modaps.eosdis.nasa.gov/api/area/csv"
+FIRMS_STATUS_URL = "https://firms.modaps.eosdis.nasa.gov/mapserver/mapkey_status/"
+
+# Bounding box covering all of Kenya: west,south,east,north
+KENYA_BBOX = "33.5,-5.0,42.0,5.5"
+
+
+def _curl_get(url: str, timeout: float) -> tuple[bool, str]:
+    """Fetch a URL via curl.exe. Returns (success, text_or_error)."""
+
+    try:
+        result = subprocess.run(
+            ["curl.exe", "-s", "--max-time", str(int(timeout)), url],
+            capture_output=True,
+            text=True,
+            timeout=timeout + 5,
+        )
+
+    except (subprocess.SubprocessError, OSError) as exc:
+        return False, f"curl failed to run: {exc}"
+
+    if result.returncode != 0:
+        return False, f"curl exited with code {result.returncode}: {result.stderr}"
+
+    return True, result.stdout
+
+
+class FIRMSConnector(BaseConnector):
+    """VIIRS active fire / thermal anomaly connector via NASA FIRMS."""
+
+    @property
+    def provider_name(self) -> str:
+        return "VIIRS-FIRMS"
+
+    def connect(self) -> ConnectorResult:
+        map_key = self.config.credentials.get("map_key", "")
+
+        if not map_key:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="connect",
+                error="FIRMS_MAP_KEY is not configured.",
+            )
+
+        url = f"{FIRMS_STATUS_URL}?MAP_KEY={map_key}"
+        ok, text = _curl_get(url, min(self.config.timeout, 15))
+
+        if not ok:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="connect",
+                error=f"Unable to reach FIRMS: {text}",
+            )
+
+        try:
+            data = json.loads(text)
+
+        except ValueError as exc:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="connect",
+                error=f"FIRMS returned an invalid response: {exc}",
+            )
+
+        return ConnectorResult.ok(
+            provider=self.provider_name,
+            operation="connect",
+            data=data,
+        )
+
+    def search(self, **filters: Any) -> ConnectorResult:
+        map_key = self.config.credentials.get("map_key", "")
+
+        if not map_key:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="search",
+                error="FIRMS_MAP_KEY is not configured.",
+            )
+
+        bbox = filters.get("bbox", KENYA_BBOX)
+        sensor = filters.get("sensor", "VIIRS_SNPP_NRT")
+        day_range = filters.get("day_range", 1)
+
+        url = f"{FIRMS_AREA_BASE}/{map_key}/{sensor}/{bbox}/{day_range}"
+        ok, text = _curl_get(url, min(self.config.timeout, 30))
+
+        if not ok:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="search",
+                error=f"Unable to reach FIRMS: {text}",
+            )
+
+        text = text.strip()
+
+        if not text or text.lower().startswith("invalid"):
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="search",
+                error=f"FIRMS returned an unexpected response: {text[:200]}",
+            )
+
+        reader = csv.DictReader(io.StringIO(text))
+        detections = list(reader)
+
+        return ConnectorResult.ok(
+            provider=self.provider_name,
+            operation="search",
+            data=detections,
+            metadata={
+                "bbox": bbox,
+                "sensor": sensor,
+                "day_range": day_range,
+                "count": len(detections),
+            },
+        )
+
+    def download(self, product_id: str) -> ConnectorResult:
+        return ConnectorResult.failure(
+            provider=self.provider_name,
+            operation="download",
+            error="FIRMS does not support per-product downloads; use search() instead.",
+        )
+
+
+def build_firms_connector() -> FIRMSConnector:
+    """Factory: builds a FIRMSConnector wired to GeoShield settings."""
+
+    config = ConnectorConfig(
+        connector_id="firms_viirs",
+        provider="NASA-FIRMS",
+        enabled=bool(settings.firms_map_key),
+        base_url=FIRMS_AREA_BASE,
+        timeout=settings.http_timeout,
+        credentials={"map_key": settings.firms_map_key},
+    )
+    return FIRMSConnector(config)
+
+
+===== core\connectors\gpm_connector.py =====
+
+"""
+GeoShield GPM/IMERG Connector
+
+Precipitation data via NASA GPM IMERG (Early Run), accessed through
+the PPS jsimpsonhttps server. Implements the standard GeoShield
+BaseConnector interface.
+
+Uses curl.exe (Windows Schannel) for network access, consistent with
+the FIRMS and Copernicus connectors on this machine (OpenSSL 3.0.20
+has known SSLEOFError issues against several external HTTPS servers).
+
+Computes real per-county rainfall (mm) by downloading the latest
+1-day IMERG GeoTIFF and running zonal statistics against Kenya's
+county boundaries. Result is cached for CACHE_MINUTES since IMERG
+Early Run itself only updates a few times per hour.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import time
+from pathlib import Path
+from typing import Any
+
+import geopandas as gpd
+import rasterio
+import rasterio.mask
+
+from core.config import settings
+from .base_connector import BaseConnector
+from .connector_config import ConnectorConfig
+from .connector_result import ConnectorResult
+
+PPS_HOST = "https://jsimpsonhttps.pps.eosdis.nasa.gov"
+IMERG_DIR = f"{PPS_HOST}/imerg/gis/early/"
+IMERG_LIST_URL = f"{PPS_HOST}/text/imerg/gis/early/"
+COUNTIES_GEOJSON = Path("frontend/static/data/kenya_counties.geojson")
+CACHE_TIF = Path("core/data/cache/imerg_latest.tif")
+CACHE_MINUTES = 60
+
+
+def _curl_get(url: str, auth: str, timeout: float, out_file: Path | None = None) -> tuple[bool, str]:
+    """Fetch a URL via curl.exe with HTTP Basic Auth. Returns (success, text_or_error)."""
+
+    cmd = ["curl.exe", "-s", "-u", auth, "--max-time", str(int(timeout))]
+
+    if out_file:
+        cmd += ["-o", str(out_file)]
+
+    cmd.append(url)
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10)
+
+    except (subprocess.SubprocessError, OSError) as exc:
+        return False, f"curl failed to run: {exc}"
+
+    if result.returncode != 0:
+        return False, f"curl exited with code {result.returncode}: {result.stderr}"
+
+    return True, result.stdout
+
+
+class GPMConnector(BaseConnector):
+    """GPM/IMERG precipitation connector via NASA PPS."""
+
+    def __init__(self, config: ConnectorConfig) -> None:
+        super().__init__(config)
+        self._cache: dict[str, Any] | None = None
+        self._cache_time: float = 0.0
+
+    @property
+    def provider_name(self) -> str:
+        return "GPM-IMERG"
+
+    def _auth_string(self) -> str:
+        email = self.config.credentials.get("email", "")
+        return f"{email}:{email}"
+
+    def connect(self) -> ConnectorResult:
+        email = self.config.credentials.get("email", "")
+
+        if not email:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="connect",
+                error="GPM_PPS_EMAIL is not configured.",
+            )
+
+        ok, text = _curl_get(IMERG_DIR + "V06/", self._auth_string(), min(self.config.timeout, 15))
+
+        if not ok:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="connect",
+                error=f"Unable to reach PPS: {text}",
+            )
+
+        return ConnectorResult.ok(provider=self.provider_name, operation="connect", data={"reachable": True})
+
+    def _find_latest_1day_file(self) -> str | None:
+        auth = self._auth_string()
+        ok, text = _curl_get(IMERG_LIST_URL, auth, min(self.config.timeout, 30))
+
+        if not ok:
+            return None
+
+        lines = [line.strip() for line in text.splitlines() if line.strip().endswith(".1day.tif")]
+
+        if not lines:
+            return None
+
+        return lines[-1]
+
+    def _compute_zonal_stats(self) -> dict[str, float]:
+        counties = gpd.read_file(COUNTIES_GEOJSON)
+        results: dict[str, float] = {}
+
+        with rasterio.open(CACHE_TIF) as src:
+            for _, row in counties.iterrows():
+                name = row.get("COUNTY") or row.get("NAME") or row.get("name")
+
+                if not name:
+                    continue
+
+                geom = [row.geometry.__geo_interface__]
+
+                try:
+                    out_image, _ = rasterio.mask.mask(src, geom, crop=True)
+
+                except ValueError:
+                    results[name] = 0.0
+                    continue
+
+                pixels = out_image[0]
+                valid = pixels[pixels > 0]
+                mean_mm = (float(valid.mean()) / 10.0) if len(valid) else 0.0
+                results[name] = round(mean_mm, 2)
+
+        return results
+
+    def search(self, **filters: Any) -> ConnectorResult:
+        now = time.time()
+
+        if self._cache is not None and (now - self._cache_time) < (CACHE_MINUTES * 60):
+            return ConnectorResult.ok(
+                provider=self.provider_name,
+                operation="search",
+                data=self._cache,
+                metadata={"cached": True, "cache_age_seconds": round(now - self._cache_time)},
+            )
+
+        email = self.config.credentials.get("email", "")
+
+        if not email:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="search",
+                error="GPM_PPS_EMAIL is not configured.",
+            )
+
+        latest_path = self._find_latest_1day_file()
+
+        if not latest_path:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="search",
+                error="Could not find a recent 1-day IMERG file.",
+            )
+
+        CACHE_TIF.parent.mkdir(parents=True, exist_ok=True)
+        file_url = PPS_HOST + latest_path
+
+        ok, text = _curl_get(file_url, self._auth_string(), min(self.config.timeout, 60), out_file=CACHE_TIF)
+
+        if not ok or not CACHE_TIF.exists() or CACHE_TIF.stat().st_size < 1000:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="search",
+                error=f"Failed to download IMERG file: {text}",
+            )
+
+        try:
+            stats = self._compute_zonal_stats()
+
+        except Exception as exc:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="search",
+                error=f"Zonal statistics failed: {exc}",
+            )
+
+        self._cache = stats
+        self._cache_time = now
+
+        return ConnectorResult.ok(
+            provider=self.provider_name,
+            operation="search",
+            data=stats,
+            metadata={"cached": False, "source_file": latest_path},
+        )
+
+    def download(self, product_id: str) -> ConnectorResult:
+        return ConnectorResult.failure(
+            provider=self.provider_name,
+            operation="download",
+            error="GPM-IMERG does not support per-product downloads; use search() instead.",
+        )
+
+
+def build_gpm_connector() -> GPMConnector:
+    """Factory: builds a GPMConnector wired to GeoShield settings."""
+
+    config = ConnectorConfig(
+        connector_id="gpm_imerg",
+        provider="NASA-GPM",
+        enabled=bool(settings.gpm_pps_email),
+        base_url=PPS_HOST,
+        timeout=settings.http_timeout,
+        credentials={"email": settings.gpm_pps_email},
+    )
+    return GPMConnector(config)
+
+
+
+===== core\connectors\era5_connector.py =====
+
+"""
+GeoShield ERA5/Climate Connector (via Open-Meteo)
+
+Live current-conditions weather data via Open-Meteo (open-meteo.com),
+an ECMWF-based provider used here in place of the official Copernicus
+CDS API for ERA5 -- CDS requests are queued and can take hours to
+fulfill, which does not fit a live dashboard. Open-Meteo integrates
+ECMWF among 15+ national weather services and responds instantly,
+free, with no registration required.
+
+Implements the standard GeoShield BaseConnector interface. Uses
+curl.exe for network access, consistent with the other connectors
+on this machine.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import time
+from pathlib import Path
+from typing import Any
+
+import geopandas as gpd
+
+from core.config import settings
+from .base_connector import BaseConnector
+from .connector_config import ConnectorConfig
+from .connector_result import ConnectorResult
+
+OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+COUNTIES_GEOJSON = Path("frontend/static/data/kenya_counties.geojson")
+CACHE_MINUTES = 30
+
+
+def _curl_get(url: str, timeout: float) -> tuple[bool, str]:
+    """Fetch a URL via curl.exe. Returns (success, text_or_error)."""
+
+    try:
+        result = subprocess.run(
+            ["curl.exe", "-s", "--max-time", str(int(timeout)), url],
+            capture_output=True,
+            text=True,
+            timeout=timeout + 5,
+        )
+
+    except (subprocess.SubprocessError, OSError) as exc:
+        return False, f"curl failed to run: {exc}"
+
+    if result.returncode != 0:
+        return False, f"curl exited with code {result.returncode}: {result.stderr}"
+
+    return True, result.stdout
+
+
+class ERA5Connector(BaseConnector):
+    """Live climate/weather connector via Open-Meteo (ECMWF-based)."""
+
+    def __init__(self, config: ConnectorConfig) -> None:
+        super().__init__(config)
+        self._cache: dict[str, Any] | None = None
+        self._cache_time: float = 0.0
+
+    @property
+    def provider_name(self) -> str:
+        return "ERA5-OpenMeteo"
+
+    def connect(self) -> ConnectorResult:
+        url = f"{OPEN_METEO_URL}?latitude=-1.286389&longitude=36.817223&current=temperature_2m"
+        ok, text = _curl_get(url, min(self.config.timeout, 15))
+
+        if not ok:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="connect",
+                error=f"Unable to reach Open-Meteo: {text}",
+            )
+
+        try:
+            data = json.loads(text)
+
+        except ValueError as exc:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="connect",
+                error=f"Open-Meteo returned an invalid response: {exc}",
+            )
+
+        return ConnectorResult.ok(provider=self.provider_name, operation="connect", data=data)
+
+    def search(self, **filters: Any) -> ConnectorResult:
+        now = time.time()
+
+        if self._cache is not None and (now - self._cache_time) < (CACHE_MINUTES * 60):
+            return ConnectorResult.ok(
+                provider=self.provider_name,
+                operation="search",
+                data=self._cache,
+                metadata={"cached": True, "cache_age_seconds": round(now - self._cache_time)},
+            )
+
+        try:
+            counties = gpd.read_file(COUNTIES_GEOJSON)
+
+        except Exception as exc:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="search",
+                error=f"Failed to load county boundaries: {exc}",
+            )
+
+        names: list[str] = []
+        lats: list[str] = []
+        lons: list[str] = []
+
+        for _, row in counties.iterrows():
+            name = row.get("COUNTY") or row.get("NAME") or row.get("name")
+
+            if not name:
+                continue
+
+            centroid = row.geometry.centroid
+            names.append(name)
+            lats.append(str(round(centroid.y, 4)))
+            lons.append(str(round(centroid.x, 4)))
+
+        lat_param = ",".join(lats)
+        lon_param = ",".join(lons)
+
+        url = (
+            f"{OPEN_METEO_URL}?latitude={lat_param}&longitude={lon_param}"
+            "&current=temperature_2m,relative_humidity_2m,wind_speed_10m,surface_pressure"
+            "&timezone=auto"
+        )
+
+        ok, text = _curl_get(url, min(self.config.timeout, 30))
+
+        if not ok:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="search",
+                error=f"Unable to reach Open-Meteo: {text}",
+            )
+
+        try:
+            data = json.loads(text)
+
+        except ValueError as exc:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="search",
+                error=f"Open-Meteo returned an invalid response: {exc}",
+            )
+
+        if not isinstance(data, list):
+            data = [data]
+
+        if len(data) != len(names):
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="search",
+                error=f"Mismatch: {len(names)} counties requested, {len(data)} results returned.",
+            )
+
+        results: dict[str, dict[str, Any]] = {}
+
+        for name, entry in zip(names, data):
+            current = entry.get("current", {})
+            results[name] = {
+                "temperature_c": current.get("temperature_2m"),
+                "humidity_pct": current.get("relative_humidity_2m"),
+                "wind_speed_kmh": current.get("wind_speed_10m"),
+                "pressure_hpa": current.get("surface_pressure"),
+            }
+
+        self._cache = results
+        self._cache_time = now
+
+        return ConnectorResult.ok(
+            provider=self.provider_name,
+            operation="search",
+            data=results,
+            metadata={"cached": False, "county_count": len(results)},
+        )
+
+    def download(self, product_id: str) -> ConnectorResult:
+        return ConnectorResult.failure(
+            provider=self.provider_name,
+            operation="download",
+            error="ERA5-OpenMeteo does not support per-product downloads; use search() instead.",
+        )
+
+
+def build_era5_connector() -> ERA5Connector:
+    """Factory: builds an ERA5Connector (Open-Meteo backed)."""
+
+    config = ConnectorConfig(
+        connector_id="era5_openmeteo",
+        provider="Open-Meteo",
+        enabled=True,
+        base_url=OPEN_METEO_URL,
+        timeout=settings.http_timeout,
+        credentials={},
+    )
+    return ERA5Connector(config)
+
+
+===== core\event_enrichment.py =====
+
+from backend.spatial.spatial_engine import SpatialEngine
+
+
+class EventEnrichmentEngine:
+
+    def __init__(self, data_manager):
+
+        self.spatial = SpatialEngine(data_manager)
+
+    def enrich(self, longitude, latitude):
+
+        county = self.spatial.locate_point(
+            longitude,
+            latitude
+        )
+
+        road = self.spatial.nearest_road(
+            longitude,
+            latitude
+        )
+
+        if county.empty:
+            county_name = "Unknown"
+        else:
+            county_name = county["COUNTY"].iloc[0]
+
+        return {
+
+            "longitude": longitude,
+
+            "latitude": latitude,
+
+            "county": county_name,
+
+            "road_type": road["RTT_DESCRI"],
+
+            "road_surface": road["MED_DESCRI"]
+
+        }
+
+===== core\config.py =====
+
+"""
+GeoShield AI Enterprise
+Central Environment Configuration
+
+Secure centralized configuration for:
+- GeoShield runtime
+- Copernicus Data Space Ecosystem
+- Planet
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+
+from dotenv import load_dotenv
+
+
+# ============================================================
+# ENVIRONMENT LOADING
+# ============================================================
+
+# Load the project .env file.
+#
+# Values already present in the operating-system environment
+# take precedence because override=False.
+load_dotenv(".env", override=False)
+
+
+# ============================================================
+# GEOSHIELD SETTINGS
+# ============================================================
+
+@dataclass(frozen=True)
+class GeoShieldSettings:
+    """Centralized GeoShield runtime configuration."""
+
+    # ---------------------------------------------------------
+    # Application
+    # ---------------------------------------------------------
+
+    app_name: str = "GeoShield AI Enterprise"
+
+    environment: str = os.getenv(
+        "GEOSHIELD_ENV",
+        "development",
+    )
+
+    # ---------------------------------------------------------
+    # Copernicus Data Space Ecosystem
+    # ---------------------------------------------------------
+
+    cdse_username: str = os.getenv(
+        "CDSE_USERNAME",
+        "",
+    )
+
+    cdse_password: str = os.getenv(
+        "CDSE_PASSWORD",
+        "",
+    )
+
+    cdse_client_id: str = os.getenv(
+        "CDSE_CLIENT_ID",
+        "cdse-public",
+    )
+
+    cdse_token_url: str = os.getenv(
+        "CDSE_TOKEN_URL",
+        (
+            "https://identity.dataspace.copernicus.eu/"
+            "auth/realms/CDSE/protocol/openid-connect/token"
+        ),
+    )
+
+    cdse_catalog_url: str = os.getenv(
+        "CDSE_CATALOG_URL",
+        (
+            "https://catalogue.dataspace.copernicus.eu/"
+            "odata/v1/Products"
+        ),
+    )
+
+    # ---------------------------------------------------------
+    # NASA FIRMS (VIIRS active fire / thermal data)
+    # ---------------------------------------------------------
+
+    firms_map_key: str = os.getenv(
+        "FIRMS_MAP_KEY",
+        "",
+    )
+
+    # ---------------------------------------------------------
+    # NASA GPM / IMERG (precipitation, via PPS)
+    # ---------------------------------------------------------
+
+    gpm_pps_email: str = os.getenv(
+        "GPM_PPS_EMAIL",
+        "",
+    )
+
+    # ---------------------------------------------------------
+    # Planet
+    # ---------------------------------------------------------
+
+    planet_api_key: str = os.getenv(
+        "PLANET_API_KEY",
+        "",
+    )
+
+    planet_client_id: str = os.getenv(
+        "PLANET_CLIENT_ID",
+        "",
+    )
+
+    planet_client_secret: str = os.getenv(
+        "PLANET_CLIENT_SECRET",
+        "",
+    )
+
+    # ---------------------------------------------------------
+    # Runtime
+    # ---------------------------------------------------------
+
+    http_timeout: float = float(
+        os.getenv(
+            "GEOSHIELD_HTTP_TIMEOUT",
+            "60",
+        )
+    )
+
+
+# ============================================================
+# GLOBAL SETTINGS INSTANCE
+# ============================================================
+
+settings = GeoShieldSettings()
+
+
+
+
+===== core\auth\copernicus.py =====
+
+"""
+GeoShield AI Enterprise
+Copernicus Authentication Manager
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import time
+from dataclasses import dataclass
+
+import requests
+
+from core.config import settings
+from core.auth.exceptions import (
+    CopernicusAuthenticationError,
+    CopernicusConfigurationError,
+    CopernicusNetworkError,
+)
+
+
+@dataclass
+class TokenState:
+    """Runtime state of a Copernicus access token."""
+
+    access_token: str | None = None
+    expires_at: float = 0.0
+
+
+class CopernicusAuthManager:
+    """Manage Copernicus authentication and token lifecycle."""
+
+    def __init__(self, max_retries: int = 2) -> None:
+        self.state = TokenState()
+        self.max_retries = max(0, max_retries)
+
+    def is_token_valid(self) -> bool:
+        """Return True when a usable token is currently cached."""
+
+        token = self.state.access_token
+
+        return (
+            token is not None
+            and bool(token)
+            and time.time() < self.state.expires_at
+        )
+
+    def seconds_remaining(self) -> float:
+        """Return remaining lifetime of the cached token."""
+
+        if not self.is_token_valid():
+            return 0.0
+
+        remaining = self.state.expires_at - time.time()
+
+        return max(remaining, 0.0)
+
+    def _validate_configuration(self) -> None:
+        """Validate required Copernicus configuration."""
+
+        if not settings.cdse_username:
+            raise CopernicusConfigurationError(
+                "CDSE username is not configured."
+            )
+
+        if not settings.cdse_password:
+            raise CopernicusConfigurationError(
+                "CDSE password is not configured."
+            )
+
+        if not settings.cdse_client_id:
+            raise CopernicusConfigurationError(
+                "CDSE client ID is not configured."
+            )
+
+        if not settings.cdse_token_url:
+            raise CopernicusConfigurationError(
+                "CDSE token URL is not configured."
+            )
+
+    def authenticate(self) -> str:
+        """Authenticate against Copernicus Data Space via curl (Schannel), bypassing an OpenSSL/renegotiation incompatibility with this server."""
+
+        self._validate_configuration()
+
+        attempts = self.max_retries + 1
+
+        for attempt in range(1, attempts + 1):
+            try:
+                result = subprocess.run(
+                    [
+                        "curl.exe", "-s", "--max-time", "20",
+                        "-X", "POST",
+                        settings.cdse_token_url,
+                        "--data-urlencode", "grant_type=password",
+                        "--data-urlencode", f"client_id={settings.cdse_client_id}",
+                        "--data-urlencode", f"username={settings.cdse_username}",
+                        "--data-urlencode", f"password={settings.cdse_password}",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=25,
+                )
+
+            except (subprocess.SubprocessError, OSError) as exc:
+                if attempt >= attempts:
+                    raise CopernicusNetworkError(
+                        "Unable to reach Copernicus authentication service."
+                    ) from exc
+
+                time.sleep(1)
+                continue
+
+            if result.returncode != 0:
+                if attempt >= attempts:
+                    raise CopernicusNetworkError(
+                        f"curl failed with code {result.returncode}: {result.stderr}"
+                    )
+
+                time.sleep(1)
+                continue
+
+            try:
+                payload = json.loads(result.stdout)
+
+            except ValueError as exc:
+                raise CopernicusAuthenticationError(
+                    "Copernicus returned an invalid authentication response."
+                ) from exc
+
+            if "error" in payload:
+                detail = f" Error: {payload.get('error')}."
+                description = payload.get("error_description")
+
+                if description:
+                    detail += f" {description}"
+
+                raise CopernicusAuthenticationError(
+                    "Copernicus rejected the authentication request." + detail
+                )
+
+            token = payload.get("access_token")
+
+            if not isinstance(token, str) or not token:
+                raise CopernicusAuthenticationError(
+                    "Copernicus returned no valid access token."
+                )
+
+            expires_in = payload.get("expires_in", 1800)
+
+            try:
+                expires_in_seconds = int(expires_in)
+
+            except (TypeError, ValueError) as exc:
+                raise CopernicusAuthenticationError(
+                    "Copernicus returned an invalid token lifetime."
+                ) from exc
+
+            safety_margin = 60
+
+            self.state.access_token = token
+            self.state.expires_at = (
+                time.time()
+                + max(expires_in_seconds - safety_margin, 1)
+            )
+
+            return token
+
+        raise CopernicusNetworkError(
+            "Authentication failed after retry attempts."
+        )
+
+    def get_token(self) -> str:
+        """Return cached token or authenticate when necessary."""
+
+        if not self.is_token_valid():
+            return self.authenticate()
+
+        token = self.state.access_token
+
+        if token is None:
+            raise CopernicusAuthenticationError(
+                "Token state is invalid: cached token is missing."
+            )
+
+        return token
+
+
+===== backend\connectors\firms_connector.py =====
+
+import csv
+from pathlib import Path
+
+
+class FIRMSConnector:
+
+    def __init__(self):
+
+        self.disasters = []
+
+        self.project_root = Path(__file__).resolve().parents[2]
+
+    def load_csv(self, filepath):
+
+        path = self.project_root / filepath
+
+        if not path.exists():
+            raise FileNotFoundError(f"{path} not found.")
+
+        self.disasters = []
+
+        with open(path, newline="", encoding="utf-8") as file:
+
+            reader = csv.DictReader(file)
+
+            for row in reader:
+
+                disaster = {
+
+                    "id": f'{row["latitude"]}_{row["longitude"]}',
+
+                    "type": "Fire",
+
+                    "latitude": float(row["latitude"]),
+
+                    "longitude": float(row["longitude"]),
+
+                    "brightness": float(row["bright_ti4"]),
+
+                    "frp": float(row["frp"]),
+
+                    "confidence": row["confidence"],
+
+                    "satellite": row["satellite"],
+
+                    "instrument": row["instrument"],
+
+                    "date": row["acq_date"],
+
+                    "time": row["acq_time"],
+
+                    "daynight": row["daynight"]
+
+                }
+
+                self.disasters.append(disaster)
+
+        print(f"{len(self.disasters)} fire records loaded successfully.")
+
+    def get_disasters(self):
+
+        return self.disasters
+
+===== backend\spatial\data_manager.py =====
+
+"""
+GeoShield Spatial Data Manager
+
+Manages loading and retrieval of geospatial data layers.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import geopandas as gpd
+
+
+class GeoDataManager:
+    """Manage GeoPandas-based spatial data layers."""
+
+    def __init__(self) -> None:
+        """Initialize the spatial data manager."""
+
+        self.layers: dict[str, gpd.GeoDataFrame] = {}
+
+    def load_layer(
+        self,
+        name: str,
+        filepath: str,
+    ) -> None:
+        """
+        Load a geospatial layer.
+
+        Args:
+            name: Internal name used to identify the layer.
+            filepath: Path to the geospatial dataset.
+
+        Raises:
+            FileNotFoundError: If the dataset does not exist.
+            ValueError: If the layer name is empty.
+        """
+
+        if not name.strip():
+            raise ValueError("Layer name is required.")
+
+        path = Path(filepath)
+
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Spatial dataset not found: {path}"
+            )
+
+        layer = gpd.read_file(path)
+
+        self.layers[name] = layer
+
+        print(
+            f"Spatial layer '{name}' loaded successfully."
+        )
+
+    def get_layer(
+        self,
+        name: str,
+    ) -> gpd.GeoDataFrame | None:
+        """
+        Retrieve a loaded spatial layer.
+
+        Args:
+            name: Layer name.
+
+        Returns:
+            The GeoDataFrame if loaded, otherwise None.
+        """
+
+        return self.layers.get(name)
+
+    def list_layers(self) -> list[str]:
+        """
+        Return the names of all loaded layers.
+        """
+
+        return list(self.layers.keys())

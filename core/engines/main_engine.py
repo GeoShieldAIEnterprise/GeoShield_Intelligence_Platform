@@ -1,4 +1,4 @@
-﻿"""
+"""
 GeoShield AI Enterprise -- Main Engine
 Single point of coordination for the entire platform.
 """
@@ -17,6 +17,8 @@ from core.connectors.connector_registry import ConnectorRegistry
 from core.connectors.firms_connector import build_firms_connector
 from core.connectors.gpm_connector import build_gpm_connector
 from core.connectors.era5_connector import build_era5_connector
+from core.connectors.earthquake_connector import build_earthquake_connector
+from core.connectors.population_connector import build_population_connector
 
 _auth_manager = CopernicusAuthManager()
 DB_PATH = Path("database/geoshield.db")
@@ -27,6 +29,8 @@ def _build_connector_registry() -> ConnectorRegistry:
     registry.register(build_firms_connector())
     registry.register(build_gpm_connector())
     registry.register(build_era5_connector())
+    registry.register(build_earthquake_connector())
+    registry.register(build_population_connector())
     return registry
 
 
@@ -213,6 +217,63 @@ class MainEngine:
             "checked_at": now,
         }
         self._last_status["era5"] = result
+        return result
+
+    def get_earthquakes(self, period: str = "day", min_magnitude: float | None = None) -> dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        connector = self.connectors.get("USGS-Earthquake")
+
+        if connector is None or not connector.is_enabled():
+            result = {"mode": "mock", "provider": "USGS-Earthquake", "events": [], "count": 0, "checked_at": now}
+            self._last_status["earthquake"] = result
+            return result
+
+        result_obj = connector.search(period=period, min_magnitude=min_magnitude)
+
+        if not result_obj.success:
+            print(f"[MainEngine] USGS search failed: {result_obj.error}")
+            result = {
+                "mode": "mock", "provider": "USGS-Earthquake", "events": [], "count": 0,
+                "error": result_obj.error, "checked_at": now,
+            }
+            self._last_status["earthquake"] = result
+            return result
+
+        result = {
+            "mode": "live",
+            "provider": "USGS-Earthquake",
+            "events": result_obj.data,
+            "count": result_obj.metadata.get("count", len(result_obj.data)),
+            "checked_at": now,
+        }
+        self._last_status["earthquake"] = result
+        return result
+
+    def get_population_exposure(self, latitude: float, longitude: float, radius_km: float = 50.0) -> dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        connector = self.connectors.get("WorldPop")
+
+        if connector is None or not connector.is_enabled():
+            result = {"mode": "mock", "provider": "WorldPop", "population": None, "checked_at": now}
+            self._last_status["population"] = result
+            return result
+
+        result_obj = connector.search(latitude=latitude, longitude=longitude, radius_km=radius_km)
+
+        if not result_obj.success:
+            print(f"[MainEngine] WorldPop search failed: {result_obj.error}")
+            result = {"mode": "mock", "provider": "WorldPop", "population": None, "error": result_obj.error, "checked_at": now}
+            self._last_status["population"] = result
+            return result
+
+        result = {
+            "mode": "live",
+            "provider": "WorldPop",
+            **result_obj.data,
+            "cached": result_obj.metadata.get("cached", False),
+            "checked_at": now,
+        }
+        self._last_status["population"] = result
         return result
 
     def get_satellite_live_status(self, satellite_id: str) -> dict[str, Any] | None:

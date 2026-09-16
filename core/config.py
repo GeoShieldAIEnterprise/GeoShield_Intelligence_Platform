@@ -1,4 +1,4 @@
-﻿"""
+"""
 GeoShield AI Enterprise
 Central Environment Configuration
 
@@ -96,6 +96,15 @@ class GeoShieldSettings:
 
     gpm_pps_email: str = os.getenv(
         "GPM_PPS_EMAIL",
+        "",
+    )
+
+    # ---------------------------------------------------------
+    # WorldPop (population exposure)
+    # ---------------------------------------------------------
+
+    worldpop_api_key: str = os.getenv(
+        "WORLDPOP_API_KEY",
         "",
     )
 

@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
@@ -12,6 +12,9 @@ from backend.api.satellites import router as satellites_router
 from backend.routes.dashboard import router as dashboard_router
 from backend.api.sentinel2_map_layer import router as sentinel2_map_layer_router
 from backend.api.main_engine_api import router as main_engine_router
+from backend.api.earthquake_api import router as earthquake_router
+from backend.disaster.earthquake_engine import earthquake_engine
+from core.engines.main_engine import main_engine
 from backend.routes.county import router as county_router
 
 app = FastAPI(title="GeoShield AI Enterprise", version="1.3.1")
@@ -25,6 +28,8 @@ app.include_router(dashboard_router, prefix="/api")
 app.include_router(sentinel2_map_layer_router)
 app.include_router(main_engine_router)
 app.include_router(county_router)
+app.include_router(earthquake_router)
+main_engine.register_engine("earthquake", earthquake_engine)
 
 @app.get("/api/latest-tile")
 def get_latest_tile(db: Session = Depends(get_db)):

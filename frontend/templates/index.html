@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -35,8 +35,8 @@
             <hr>
             <a id="navDrought" style="cursor:pointer;">🌾 Drought Engine</a>
             <a id="navFlood" style="cursor:pointer;">🌊 Flood Engine</a>
-            <a>🔥 Fire Engine</a>
-            <a>🌍 Earthquake Engine</a>
+            <a id="navFire" style="cursor:pointer;">🔥 Fire Engine</a>
+            <a id="navEarthquake" style="cursor:pointer;">🌍 Earthquake Engine</a>
             <a>🌿 Agriculture</a>
             <hr>
             <a>⚙️ Settings</a>
@@ -187,6 +187,80 @@
             </div>
         </section>
 
+        <!-- GEOSHIELD FIRE ENGINE PAGE -->
+        <section id="geoshieldFirePage" class="geoshield-workspace-page geoshield-fire-page">
+            <div class="livemap-header">
+                <div>
+                    <h2>🔥 Fire Engine -- VIIRS / ERA5</h2>
+                    <p id="fireSceneInfo">Loading fire intelligence...</p>
+                </div>
+                <div class="livemap-controls">
+                    <input type="text" id="fireSearchInput" placeholder="Search a location...">
+                    <label><input type="radio" name="fireMapView" value="satellite" checked> Satellite</label>
+                    <label><input type="radio" name="fireMapView" value="street"> Street</label>
+                    <button type="button" id="fireCloseBtn" class="livemap-close-btn" title="Return to Main Map">✕</button>
+                </div>
+            </div>
+            <div id="fireMap" class="livemap-container"></div>
+            <div id="fireSummaryPanel" class="drought-summary-panel">
+                <div class="drought-summary-card" style="display:flex; gap:12px; align-items:center;">
+                    <span>🔥 Hotspot intensity:</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#FFD400;"></span> Low</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#FF8C00;"></span> Moderate</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#FF3B30;"></span> High</span>
+                </div>
+                <div class="drought-summary-card">
+                    <span>🔥 Live VIIRS Hotspots (Kenya-wide)</span>
+                    <strong id="fireHotspotCount">--</strong>
+                </div>
+                <div class="drought-summary-card">
+                    <span>🌿 Highest Fire Risk County (dry vegetation)</span>
+                    <strong id="fireHighestRiskCounty">--</strong>
+                </div>
+                <div class="drought-summary-card">
+                    <span>🌡️ Live Temperature (ERA5)</span>
+                    <strong id="fireTempNote">Click a county for live reading</strong>
+                </div>
+                <div class="drought-summary-card" style="font-size:12px; color:#94a3b8;">
+                    ⚠️ VIIRS detects all thermal anomalies, not wildfire specifically — this includes agricultural/land-clearing burns and other heat sources alongside genuine wildfires.
+                </div>
+            </div>
+        </section>
+
+        <!-- GEOSHIELD EARTHQUAKE ENGINE PAGE -->
+        <section id="geoshieldEarthquakePage" class="geoshield-workspace-page geoshield-earthquake-page">
+            <div class="livemap-header">
+<div>
+    <h2>🌍 Earthquake Engine -- USGS / WorldPop</h2>
+    <p id="earthquakeSceneInfo">Loading earthquake intelligence...</p>
+</div>
+<div class="livemap-controls">
+    <input type="text" id="earthquakeSearchInput" placeholder="Search a location...">
+    <label><input type="radio" name="earthquakeMapView" value="satellite" checked> Satellite</label>
+    <label><input type="radio" name="earthquakeMapView" value="street"> Street</label>
+    <button type="button" id="earthquakeCloseBtn" class="livemap-close-btn" title="Return to Main Map">✕</button>
+</div>
+            </div>
+            <div id="earthquakeMap" class="livemap-container"></div>
+            <div id="earthquakeSummaryPanel" class="drought-summary-panel">
+<div class="drought-summary-card">
+    <span>🌍 Live Earthquakes (past 24h, magnitude 4.0+)</span>
+    <strong id="earthquakeCount">--</strong>
+</div>
+<div class="drought-summary-card">
+    <span>⚠️ Highest Risk Event</span>
+    <strong id="earthquakeHighestRisk">--</strong>
+</div>
+<div class="drought-summary-card">
+    <span>👥 Population Exposed (50km radius)</span>
+    <strong id="earthquakePopulationNote">Click an event for live reading</strong>
+</div>
+<div class="drought-summary-card" style="font-size:12px; color:#94a3b8;">
+    📡 Live feed: USGS Earthquake Hazards Program (earthquake.usgs.gov). Population exposure: WorldPop Global Project, 2020 modeled population surface, queried live per event.
+</div>
+            </div>
+        </section>
+
         <!-- GEOSHIELD DROUGHT ENGINE PAGE -->
         <section id="geoshieldDroughtPage" class="geoshield-workspace-page geoshield-drought-page">
             <div class="livemap-header">
@@ -309,11 +383,16 @@
 <script src="/static/live-map.js"></script>
 <script src="/static/drought.js"></script>
 <script src="/static/flood.js"></script>
+<script src="/static/fireengine.js"></script>
+<script src="/static/earthquakeengine.js"></script>
 <script src="/static/workspace-nav.js"></script>
 <script src="/static/map-layout-lock.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
+
+
+
 
 
 

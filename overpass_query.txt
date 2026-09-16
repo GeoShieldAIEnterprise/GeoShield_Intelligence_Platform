@@ -1,0 +1,21 @@
+[out:json][timeout:180];
+area["ISO3166-1"="KE"][admin_level=2]->.kenya;
+(
+  node["amenity"="fire_station"](area.kenya);
+  way["amenity"="fire_station"](area.kenya);
+  node["amenity"="hospital"](area.kenya);
+  way["amenity"="hospital"](area.kenya);
+  node["amenity"="police"](area.kenya);
+  way["amenity"="police"](area.kenya);
+  node["landuse"="military"](area.kenya);
+  way["landuse"="military"](area.kenya);
+  node["name"~"Red Cross",i](area.kenya);
+  way["name"~"Red Cross",i](area.kenya);
+  node["name"~"St John",i](area.kenya);
+  way["name"~"St John",i](area.kenya);
+  node["name"~"Scouts",i](area.kenya);
+  way["name"~"Scouts",i](area.kenya);
+  node["name"~"NEMA|National Environment Management",i](area.kenya);
+  way["name"~"NEMA|National Environment Management",i](area.kenya);
+);
+out center tags;

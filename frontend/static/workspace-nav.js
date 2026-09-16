@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
     "use strict";
 
     const MAP_PAGE = "geoshieldMapPage";
@@ -6,6 +6,8 @@
     const LIVEMAP_PAGE = "geoshieldLiveMapPage";
     const DROUGHT_PAGE = "geoshieldDroughtPage";
     const FLOOD_PAGE = "geoshieldFloodPage";
+    const FIRE_PAGE = "geoshieldFirePage";
+    const EARTHQUAKE_PAGE = "geoshieldEarthquakePage";
 
     let currentWorkspace = "map";
 
@@ -16,6 +18,8 @@
         const liveMapPage = document.getElementById(LIVEMAP_PAGE);
         const droughtPage = document.getElementById(DROUGHT_PAGE);
         const floodPage = document.getElementById(FLOOD_PAGE);
+        const firePage = document.getElementById(FIRE_PAGE);
+        const earthquakePage = document.getElementById(EARTHQUAKE_PAGE);
 
         if (!mapPage || !intelligencePage) {
             console.error("GeoShield: workspace pages not found.");
@@ -27,6 +31,8 @@
             mode === "livemap" ? "livemap" :
             mode === "drought" ? "drought" :
             mode === "flood" ? "flood" :
+            mode === "fire" ? "fire" :
+            mode === "earthquake" ? "earthquake" :
             "map";
 
         const showMap = currentWorkspace === "map";
@@ -34,6 +40,8 @@
         const showIntelligence = currentWorkspace === "intelligence";
         const showDrought = currentWorkspace === "drought";
         const showFlood = currentWorkspace === "flood";
+        const showFire = currentWorkspace === "fire";
+        const showEarthquake = currentWorkspace === "earthquake";
 
         mapPage.classList.toggle("workspace-page-active", showMap);
         intelligencePage.classList.toggle("workspace-page-active", showIntelligence);
@@ -50,11 +58,21 @@
             floodPage.classList.toggle("workspace-page-active", showFlood);
         }
 
+        if (firePage) {
+            firePage.classList.toggle("workspace-page-active", showFire);
+        }
+
+        if (earthquakePage) {
+            earthquakePage.classList.toggle("workspace-page-active", showEarthquake);
+        }
+
         document.body.classList.toggle("geoshield-map-mode", showMap);
         document.body.classList.toggle("geoshield-intelligence-mode", showIntelligence);
         document.body.classList.toggle("geoshield-livemap-mode", showLiveMap);
         document.body.classList.toggle("geoshield-drought-mode", showDrought);
         document.body.classList.toggle("geoshield-flood-mode", showFlood);
+        document.body.classList.toggle("geoshield-fire-mode", showFire);
+        document.body.classList.toggle("geoshield-earthquake-mode", showEarthquake);
 
         updateNavigator();
 
@@ -83,6 +101,20 @@
             }
         }
 
+        if (showFire) {
+            if (window.GeoShieldFire) {
+                window.GeoShieldFire.init();
+                window.GeoShieldFire.refreshIfVisible();
+            }
+        }
+
+        if (showEarthquake) {
+            if (window.GeoShieldEarthquake) {
+                window.GeoShieldEarthquake.init();
+                window.GeoShieldEarthquake.refreshIfVisible();
+            }
+        }
+
         console.log("GeoShield workspace:", currentWorkspace.toUpperCase());
     }
 
@@ -99,6 +131,16 @@
 
     function goToFlood() {
         setWorkspace("flood");
+    }
+
+
+    function goToFire() {
+        setWorkspace("fire");
+    }
+
+
+    function goToEarthquake() {
+        setWorkspace("earthquake");
     }
 
 
@@ -231,6 +273,26 @@
             floodCloseBtn.addEventListener("click", goToMap);
         }
 
+        const fireLink = document.getElementById("navFire");
+        if (fireLink) {
+            fireLink.addEventListener("click", goToFire);
+        }
+
+        const fireCloseBtn = document.getElementById("fireCloseBtn");
+        if (fireCloseBtn) {
+            fireCloseBtn.addEventListener("click", goToMap);
+        }
+
+        const earthquakeLink = document.getElementById("navEarthquake");
+        if (earthquakeLink) {
+            earthquakeLink.addEventListener("click", goToEarthquake);
+        }
+
+        const earthquakeCloseBtn = document.getElementById("earthquakeCloseBtn");
+        if (earthquakeCloseBtn) {
+            earthquakeCloseBtn.addEventListener("click", goToMap);
+        }
+
         console.log("GeoShield Workspace Navigation READY");
     }
 
@@ -242,6 +304,8 @@
         goToLiveMap,
         goToDrought,
         goToFlood,
+        goToFire,
+        goToEarthquake,
 
         getCurrentWorkspace: function () {
             return currentWorkspace;
