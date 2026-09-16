@@ -1244,22 +1244,22 @@ The next AI should:
 11. Keep humans responsible for final decisions; GeoShield provides intelligence and decision support.
 
 
-## Agriculture Engine — Current Status & Temporary Blockers
+## Agriculture Engine — Current Status
 
 ### Completed
 
 The Agriculture Engine backend is fully working and has been independently verified.
 
-- RiskEngine.calculate_agriculture_risk() calculates drought/crop-stress risk using rainfall, temperature, and humidity.
-- DecisionEngine.recommend_agriculture() generates action recommendations according to risk severity.
-- ackend\disaster\agriculture_engine.py retrieves live GPM rainfall and ERA5 weather data through the Main Engine, processes all 47 Kenyan counties, and returns ranked agriculture-risk data.
-- ackend\api\agriculture_api.py exposes:
-  - /api/agriculture/live
-  - /api/agriculture/summary
+- `RiskEngine.calculate_agriculture_risk()` calculates drought/crop-stress risk using rainfall, temperature, and humidity.
+- `DecisionEngine.recommend_agriculture()` generates action recommendations according to risk severity.
+- `backend\disaster\agriculture_engine.py` retrieves live GPM rainfall and ERA5 weather data through the Main Engine, processes all 47 Kenyan counties, and returns ranked agriculture-risk data.
+- `backend\api\agriculture_api.py` exposes:
+  - `/api/agriculture/live`
+  - `/api/agriculture/summary`
 - Standalone verification succeeded:
   - 47 counties processed.
   - Real live data returned.
-  - Risk summary returned with risk level High.
+  - Risk summary returned with risk level `High`.
 
 ### Frontend Status
 
@@ -1268,71 +1268,99 @@ The Agriculture interface is structurally wired and rendering correctly.
 - Sidebar Agriculture navigation has a real ID and click handler.
 - Clicking Agriculture switches to the dedicated Agriculture page.
 - Agriculture header, close button, and summary panel render correctly.
-- gricultureengine.js is created and loading.
+- `agricultureengine.js` is created and loading.
 
-### Temporary Blockers
+### Solved — Sidebar Mojibake Corruption
 
-These are temporary integration/environment blockers and must NOT be interpreted as failures of the Agriculture Engine itself.
+The project-wide sidebar mojibake corruption has been fixed and verified.
 
-#### Agriculture API Feed
+- Root cause was corruption of emoji characters in `frontend\templates\index.html` caused by a browser/WHATWG Windows-1252 byte mapping.
+- The corruption involved the five WHATWG Windows-1252 gap byte values that differ from Python's strict `cp1252` mapping:
+  - `0x81`
+  - `0x8D`
+  - `0x8F`
+  - `0x90`
+  - `0x9D`
+- An explicit reverse byte-mapping table matching the corruption source was used to reconstruct the affected UTF-8 sequences.
+- Raw hexadecimal inspection confirmed that corrupted bytes were removed.
+- Visual verification in an incognito browser confirmed the sidebar now renders correctly.
+- Only `frontend\templates\index.html` was affected by this corruption.
 
-The browser currently reports:
+### Next Agriculture Task — Real-Time NDVI
 
-Unable to reach agriculture feed
+The remaining major Agriculture Engine feature is integration of real-time NDVI.
 
-The frontend is attempting:
+The Agriculture Engine already has:
 
-/api/agriculture/live
+- Agriculture risk calculation.
+- Agriculture decision recommendations.
+- Live GPM rainfall.
+- Live ERA5 weather.
+- County-level processing across all 47 Kenyan counties.
+- Working Agriculture API endpoints.
 
-The Agriculture Engine backend has already been independently verified. The browser error is therefore currently treated as an application/server integration issue.
+Before implementing NDVI, determine the source strategy.
 
-The most likely causes are:
+#### Option 1 — Sentinel-2 NDVI
 
-- Uvicorn is not running.
-- ackend.main fails during application startup.
-- A full-application dependency prevents the API server from booting.
+Use the already-integrated Sentinel-2 pipeline.
 
-#### Missing Roads Dataset
+- Calculate NDVI from Sentinel-2 Red and NIR bands.
+- Reuse the existing Copernicus/Sentinel Hub authentication and acquisition architecture.
+- Higher spatial detail, approximately 10 m for the relevant Sentinel-2 bands.
+- Limited by Sentinel-2 revisit frequency and cloud conditions.
 
-The following file is currently missing:
+#### Option 2 — MODIS/VIIRS Vegetation Index
 
-data\roads\ken_roads.shp
+Use NASA vegetation-index products.
 
-This is required by the full application because existing Earthquake/Fire functionality references the roads layer during application startup.
+- Coarser spatial resolution than Sentinel-2.
+- Much higher temporal frequency.
+- Can potentially reuse the existing curl-based connector pattern used for VIIRS/FIRMS data.
 
-Previous download attempts failed:
+#### Option 3 — Sentinel-2 + MODIS/VIIRS
+
+Use both sources as complementary vegetation intelligence.
+
+- Sentinel-2 provides higher-resolution NDVI when suitable imagery is available.
+- MODIS/VIIRS provides higher-frequency vegetation-index observations between suitable Sentinel-2 observations.
+- This follows the existing GeoShield architecture of combining complementary live data sources such as GPM and ERA5.
+
+### Agriculture NDVI Decision
+
+Do not implement NDVI until the source strategy has been selected.
+
+The AI working on GeoShield should first inspect the existing Sentinel-2 and VIIRS/FIRMS connectors and preserve the established Main Engine architecture rather than creating a separate, duplicate acquisition system.
+
+### Remaining GeoShield Engines
+
+After Agriculture is completed:
+
+1. Analytics Engine
+2. Reports Engine
+3. Alerts Engine
+4. AI Engine — final integration
+
+### Open Infrastructure Issue — Not Blocking Agriculture
+
+`data\roads\ken_roads.shp` is still missing.
+
+Previous acquisition attempts failed:
 
 - ICPAC source unavailable.
 - UC Davis DIVA-GIS source unavailable.
 
-This is a full-application startup dependency and is NOT an Agriculture Engine calculation problem.
+The roads dataset is required by existing Earthquake/Fire functionality during full application startup.
 
-Do not rebuild or redesign the Agriculture Engine to compensate for this missing dataset.
+This is an application infrastructure/data dependency and is **not an Agriculture Engine failure**.
 
-#### Sidebar Character Encoding
+### Agriculture Development Rule
 
-Pre-existing mojibake/mangled characters appear throughout the sidebar, including strings similar to:
+Agriculture development should continue from the existing verified implementation.
 
-ðŸŒ¿
-
-and
-
-ðŸ...
-
-This is a general frontend encoding issue and is not specific to Agriculture.
-
-### Development Rule
-
-Keep this section temporarily while Agriculture Engine development and integration are still in progress.
-
-After the Agriculture Engine is completely finished, integrated into the full GeoShield application, tested, and confirmed working, remove this entire temporary blocker section from this project context file.
-
-Until then:
-
-- Preserve the completed Agriculture Engine implementation.
-- Do not unnecessarily rebuild working Agriculture backend logic.
-- Do not confuse application startup problems with Agriculture Engine failures.
-- Continue Agriculture Engine development from the existing implementation.
-- Preserve the Main Engine architecture.
-- Do not modify Copernicus/Sentinel/backend components unless required for the Agriculture integration task.
-
+- Preserve the Main Engine as the central communication/orchestration layer.
+- Do not rebuild completed Agriculture components without a technical reason.
+- Do not invent or assume an NDVI provider has been selected.
+- Inspect existing Sentinel-2 and VIIRS/FIRMS infrastructure before implementing a new connector.
+- Do not modify Copernicus/Sentinel infrastructure unnecessarily.
+- Do not remove this Agriculture status section until the Agriculture Engine is officially declared complete.
