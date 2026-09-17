@@ -540,7 +540,7 @@ window.Sentinel2 = {
             "";
 
         if (!value) {
-            return "â€”";
+            return "—";
         }
 
         return String(value).slice(0, 10);
@@ -560,7 +560,7 @@ window.Sentinel2 = {
             Number(value);
 
         if (Number.isNaN(number)) {
-            return "â€”";
+            return "—";
         }
 
         return number.toFixed(1);

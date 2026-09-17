@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -17,6 +17,229 @@
     <!-- LEAFLET -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css">
+
+<style id="geoshield-agriculture-ui">
+.geoshield-agriculture-page {
+    box-sizing: border-box;
+    overflow: hidden;
+    background: #07111f;
+    color: #e2e8f0;
+}
+
+.geoshield-agriculture-page *,
+.geoshield-agriculture-page *::before,
+.geoshield-agriculture-page *::after {
+    box-sizing: border-box;
+}
+
+.agriculture-header {
+    position: relative;
+    z-index: 20;
+}
+
+.agriculture-header h2 {
+    margin: 0;
+}
+
+.agriculture-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.agriculture-mode-btn {
+    border: 1px solid #334155;
+    background: #0f1b2d;
+    color: #cbd5e1;
+    border-radius: 6px;
+    padding: 7px 12px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.agriculture-mode-btn:hover,
+.agriculture-mode-btn.active {
+    background: #164e63;
+    color: #ffffff;
+    border-color: #22d3ee;
+}
+
+.agriculture-base-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #cbd5e1;
+    font-size: 13px;
+}
+
+.agriculture-map-wrapper {
+    position: relative;
+    width: 100%;
+    height: min(56vh, 620px);
+    min-height: 360px;
+    padding: 0 16px;
+}
+
+.agriculture-map {
+    width: 100%;
+    height: 100%;
+    min-height: 360px;
+    border: 1px solid #1e3a4f;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #081522;
+}
+
+.agriculture-map-legend {
+    position: absolute;
+    right: 28px;
+    bottom: 14px;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    max-width: min(650px, calc(100% - 56px));
+    padding: 9px 12px;
+    border: 1px solid rgba(148,163,184,.35);
+    border-radius: 7px;
+    background: rgba(7,17,31,.92);
+    color: #e2e8f0;
+    font-size: 12px;
+    box-shadow: 0 5px 20px rgba(0,0,0,.35);
+}
+
+.agriculture-map-legend strong {
+    margin-right: 4px;
+}
+
+.agriculture-map-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+}
+
+.agriculture-map-legend i {
+    width: 11px;
+    height: 11px;
+    display: inline-block;
+    border-radius: 2px;
+}
+
+.agriculture-summary-panel {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    padding: 12px 16px;
+}
+
+.agriculture-table-container {
+    margin: 0 16px 18px;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    background: #0a1524;
+    overflow: hidden;
+}
+
+.agriculture-table-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    border-bottom: 1px solid #1e293b;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.agriculture-table-title span {
+    font-size: 12px;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.agriculture-table-scroll {
+    max-height: 38vh;
+    overflow: auto;
+}
+
+.agriculture-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    color: #e2e8f0;
+    font-size: 13px;
+}
+
+.agriculture-data-table th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #101d2d;
+    color: #94a3b8;
+    text-align: left;
+    font-weight: 700;
+}
+
+.agriculture-data-table th,
+.agriculture-data-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #1e293b;
+    white-space: nowrap;
+}
+
+.agriculture-data-table tbody tr:hover {
+    background: rgba(34,211,238,.07);
+}
+
+@media (max-width: 900px) {
+    .agriculture-summary-panel {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .agriculture-map-wrapper {
+        height: 48vh;
+    }
+}
+
+@media (max-width: 600px) {
+    .agriculture-summary-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .agriculture-map-wrapper {
+        height: 44vh;
+        min-height: 300px;
+    }
+
+    .agriculture-map {
+        min-height: 300px;
+    }
+
+    .agriculture-map-legend {
+        left: 28px;
+        right: 28px;
+        bottom: 10px;
+    }
+}
+
+.agriculture-satellite-banner {
+    position: absolute;
+    left: 50%;
+    top: 14px;
+    transform: translateX(-50%);
+    z-index: 1000;
+    padding: 8px 14px;
+    border-radius: 7px;
+    background: rgba(7,17,31,.92);
+    border: 1px solid rgba(148,163,184,.35);
+    color: #e2e8f0;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 5px 20px rgba(0,0,0,.35);
+}
+</style>
+
 </head>
 <body>
 <div class="app">
@@ -37,9 +260,9 @@
             <a id="navFlood" style="cursor:pointer;">🌊 Flood Engine</a>
             <a id="navFire" style="cursor:pointer;">🔥 Fire Engine</a>
             <a id="navEarthquake" style="cursor:pointer;">🌍 Earthquake Engine</a>
-            <a>🌿 Agriculture</a>
+            <a id="navAgriculture" style="cursor:pointer;">🌿 Agriculture</a>
             <hr>
-            <a>⚙️ Settings</a>
+            <a>&#9881;&#65039; Settings</a>
         </nav>
     </aside>
 
@@ -222,7 +445,7 @@
                     <strong id="fireTempNote">Click a county for live reading</strong>
                 </div>
                 <div class="drought-summary-card" style="font-size:12px; color:#94a3b8;">
-                    ⚠️ VIIRS detects all thermal anomalies, not wildfire specifically — this includes agricultural/land-clearing burns and other heat sources alongside genuine wildfires.
+                    &#9888;&#65039; VIIRS detects all thermal anomalies, not wildfire specifically — this includes agricultural/land-clearing burns and other heat sources alongside genuine wildfires.
                 </div>
             </div>
         </section>
@@ -248,7 +471,7 @@
     <strong id="earthquakeCount">--</strong>
 </div>
 <div class="drought-summary-card">
-    <span>⚠️ Highest Risk Event</span>
+    <span>&#9888;&#65039; Highest Risk Event</span>
     <strong id="earthquakeHighestRisk">--</strong>
 </div>
 <div class="drought-summary-card">
@@ -260,6 +483,109 @@
 </div>
             </div>
         </section>
+
+        <!-- GEOSHIELD AGRICULTURE ENGINE PAGE -->
+<section id="geoshieldAgriculturePage" class="geoshield-workspace-page geoshield-agriculture-page">
+
+    <div class="livemap-header agriculture-header">
+        <div>
+            <h2>Agriculture Intelligence</h2>
+            <p id="agricultureSceneInfo">
+                Loading Sentinel-2 NDVI / GPM / ERA5 intelligence...
+            </p>
+        </div>
+
+        <div class="livemap-controls agriculture-controls">
+
+            <button
+                type="button"
+                class="agriculture-mode-btn active"
+                data-agriculture-map-mode="risk">
+                Risk
+            </button>
+
+            <button
+                type="button"
+                class="agriculture-mode-btn"
+                data-agriculture-map-mode="ndvi">
+                NDVI
+            </button>
+
+            <label class="agriculture-base-label">
+                <input
+                    type="radio"
+                    name="agricultureMapView"
+                    value="satellite"
+                    checked>
+                Satellite
+            </label>
+
+            <label class="agriculture-base-label">
+                <input
+                    type="radio"
+                    name="agricultureMapView"
+                    value="street">
+                Street
+            </label>
+
+            <button
+                type="button"
+                id="agricultureCloseBtn"
+                class="livemap-close-btn"
+                title="Return to Main Map">
+                X
+            </button>
+
+        </div>
+    </div>
+
+    <div class="agriculture-map-wrapper">
+
+        <div id="agricultureMap" class="agriculture-map"></div>
+
+        <div id="agricultureMapLegend" class="agriculture-map-legend">
+            <strong>Agriculture Risk</strong>
+            <span><i style="background:#2ecc71"></i> Low</span>
+            <span><i style="background:#ffd400"></i> Moderate</span>
+            <span><i style="background:#ff8c00"></i> High</span>
+            <span><i style="background:#ff3b30"></i> Extreme</span>
+        </div>
+
+        <div id="agricultureSatelliteBanner" class="agriculture-satellite-banner" style="display:none;">
+            Zoom in to load satellite imagery
+        </div>
+
+    </div>
+
+    <div id="agricultureSummaryPanel" class="drought-summary-panel agriculture-summary-panel">
+
+        <div class="drought-summary-card">
+            <span>Counties Monitored</span>
+            <strong id="agricultureCount">--</strong>
+        </div>
+
+        <div class="drought-summary-card">
+            <span>Highest Risk County</span>
+            <strong id="agricultureHighestRisk">--</strong>
+        </div>
+
+        <div class="drought-summary-card">
+            <span>Overall Risk</span>
+            <strong id="agricultureOverallRisk">--</strong>
+        </div>
+
+        <div class="drought-summary-card">
+            <span>Average NDVI</span>
+            <strong id="agricultureAverageNdvi">--</strong>
+        </div>
+
+    </div>
+
+    <div id="agricultureTableContainer" class="agriculture-table-container">
+        Loading county agriculture intelligence...
+    </div>
+
+</section>
 
         <!-- GEOSHIELD DROUGHT ENGINE PAGE -->
         <section id="geoshieldDroughtPage" class="geoshield-workspace-page geoshield-drought-page">
@@ -385,11 +711,45 @@
 <script src="/static/flood.js"></script>
 <script src="/static/fireengine.js"></script>
 <script src="/static/earthquakeengine.js"></script>
+<script src="/static/agricultureengine.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    document.querySelectorAll("[data-agriculture-map-mode]").forEach(function (button) {
+        button.addEventListener("click", function () {
+            if (window.GeoShieldAgriculture) {
+                window.GeoShieldAgriculture.setMapMode(
+                    button.dataset.agricultureMapMode
+                );
+            }
+        });
+    });
+
+    document.querySelectorAll('input[name="agricultureMapView"]').forEach(function (radio) {
+        radio.addEventListener("change", function () {
+            if (window.GeoShieldAgriculture) {
+                window.GeoShieldAgriculture.switchBaseMap(radio.value);
+            }
+        });
+    });
+
+});
+</script>
+
 <script src="/static/workspace-nav.js"></script>
 <script src="/static/map-layout-lock.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
+
+
+
+
+
+
+
+
 
 
 
