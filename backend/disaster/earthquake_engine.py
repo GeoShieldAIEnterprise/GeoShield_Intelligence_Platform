@@ -33,10 +33,13 @@ class EarthquakeIntelligenceEngine:
             "counties",
             str(PROJECT_ROOT / "data" / "boundaries" / "Kenya_county.shp"),
         )
-        self.data_manager.load_layer(
-            "roads",
-            str(PROJECT_ROOT / "data" / "roads" / "ken_roads.shp"),
-        )
+        try:
+            self.data_manager.load_layer(
+                "roads",
+                str(PROJECT_ROOT / "data" / "roads" / "ken_roads.shp"),
+            )
+        except FileNotFoundError as exc:
+            print(f"[EarthquakeEngine] WARNING: roads layer unavailable ({exc}); road enrichment will be skipped.")
 
         self.enrichment = EventEnrichmentEngine(self.data_manager)
         self.risk = RiskEngine()

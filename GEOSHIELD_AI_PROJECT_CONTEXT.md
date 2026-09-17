@@ -1244,123 +1244,219 @@ The next AI should:
 11. Keep humans responsible for final decisions; GeoShield provides intelligence and decision support.
 
 
-## Agriculture Engine — Current Status
+## Agriculture Engine - NDVI Integration Status
 
-### Completed
+### Completed / Done So Far
 
-The Agriculture Engine backend is fully working and has been independently verified.
+#### Sidebar Mojibake Corruption
 
-- `RiskEngine.calculate_agriculture_risk()` calculates drought/crop-stress risk using rainfall, temperature, and humidity.
-- `DecisionEngine.recommend_agriculture()` generates action recommendations according to risk severity.
-- `backend\disaster\agriculture_engine.py` retrieves live GPM rainfall and ERA5 weather data through the Main Engine, processes all 47 Kenyan counties, and returns ranked agriculture-risk data.
-- `backend\api\agriculture_api.py` exposes:
-  - `/api/agriculture/live`
-  - `/api/agriculture/summary`
-- Standalone verification succeeded:
-  - 47 counties processed.
-  - Real live data returned.
-  - Risk summary returned with risk level `High`.
+The project-wide sidebar mojibake corruption has been fully resolved and confirmed in-browser.
 
-### Frontend Status
+#### NDVI Architecture
 
-The Agriculture interface is structurally wired and rendering correctly.
+The NDVI architecture has been decided.
 
-- Sidebar Agriculture navigation has a real ID and click handler.
-- Clicking Agriculture switches to the dedicated Agriculture page.
-- Agriculture header, close button, and summary panel render correctly.
-- `agricultureengine.js` is created and loading.
+GeoShield will use **multi-source NDVI/vegetation-index fusion**:
 
-### Solved — Sidebar Mojibake Corruption
+1. **Sentinel-2** - primary source, approximately 10m spatial resolution.
+2. **VIIRS-VI** - fallback and cross-check source.
+3. **MODIS-VI** - fallback and cross-check source.
 
-The project-wide sidebar mojibake corruption has been fixed and verified.
+The architecture deliberately avoids relying on a single satellite source.
 
-- Root cause was corruption of emoji characters in `frontend\templates\index.html` caused by a browser/WHATWG Windows-1252 byte mapping.
-- The corruption involved the five WHATWG Windows-1252 gap byte values that differ from Python's strict `cp1252` mapping:
-  - `0x81`
-  - `0x8D`
-  - `0x8F`
-  - `0x90`
-  - `0x9D`
-- An explicit reverse byte-mapping table matching the corruption source was used to reconstruct the affected UTF-8 sequences.
-- Raw hexadecimal inspection confirmed that corrupted bytes were removed.
-- Visual verification in an incognito browser confirmed the sidebar now renders correctly.
-- Only `frontend\templates\index.html` was affected by this corruption.
+#### Sentinel-2 NDVI Connector
 
-### Next Agriculture Task — Real-Time NDVI
+The Sentinel-2 NDVI connector has been built and wired into the Main Engine.
 
-The remaining major Agriculture Engine feature is integration of real-time NDVI.
+New file:
 
-The Agriculture Engine already has:
+`core\connectors\sentinel2\sentinel2_ndvi_connector.py`
 
-- Agriculture risk calculation.
-- Agriculture decision recommendations.
-- Live GPM rainfall.
-- Live ERA5 weather.
-- County-level processing across all 47 Kenyan counties.
-- Working Agriculture API endpoints.
+The connector:
 
-Before implementing NDVI, determine the source strategy.
+- Follows the existing `BaseConnector` interface used by the other GeoShield connectors, including GPM, ERA5 and FIRMS.
+- Reuses the existing `CopernicusAuthManager` OAuth2 token.
+- Uses the existing curl-based Copernicus authentication pattern that has already been proven working for the WMS tile layer.
+- Implements Sentinel-2 NDVI acquisition through Sentinel Hub's Statistical API.
+- Processes county geometries and returns aggregated NDVI information.
+- Includes live/mock fallback behavior and status tracking consistent with the existing connector architecture.
 
-#### Option 1 — Sentinel-2 NDVI
+#### Main Engine Integration
 
-Use the already-integrated Sentinel-2 pipeline.
+`core\engines\main_engine.py` has been modified.
 
-- Calculate NDVI from Sentinel-2 Red and NIR bands.
-- Reuse the existing Copernicus/Sentinel Hub authentication and acquisition architecture.
-- Higher spatial detail, approximately 10 m for the relevant Sentinel-2 bands.
-- Limited by Sentinel-2 revisit frequency and cloud conditions.
+Changes include:
 
-#### Option 2 — MODIS/VIIRS Vegetation Index
+- Sentinel-2 NDVI connector import.
+- Sentinel-2 NDVI connector registration:
+  `registry.register(build_sentinel2_ndvi_connector())`
+- New:
+  `main_engine.get_sentinel2_ndvi()`
+- The method mirrors the existing `get_gpm_rainfall()` and `get_era5_weather()` architecture.
+- `_last_status` tracking is included.
 
-Use NASA vegetation-index products.
+#### End-to-End Plumbing Verification
 
-- Coarser spatial resolution than Sentinel-2.
-- Much higher temporal frequency.
-- Can potentially reuse the existing curl-based connector pattern used for VIIRS/FIRMS data.
+The NDVI integration chain has been confirmed to execute cleanly.
 
-#### Option 3 — Sentinel-2 + MODIS/VIIRS
+Verified:
 
-Use both sources as complementary vegetation intelligence.
+- Copernicus token authentication succeeds.
+- County geometries load from the same `kenya_counties.geojson` source already used by GPM.
+- Connector registry lookup works.
+- Sentinel-2 NDVI connector `search()` call executes.
+- No crashes occurred in the connector plumbing.
 
-- Sentinel-2 provides higher-resolution NDVI when suitable imagery is available.
-- MODIS/VIIRS provides higher-frequency vegetation-index observations between suitable Sentinel-2 observations.
-- This follows the existing GeoShield architecture of combining complementary live data sources such as GPM and ERA5.
+#### Resolution / CRS Units Mismatch - RESOLVED
 
-### Agriculture NDVI Decision
+The Sentinel Hub Statistical API request declares county bounds using `EPSG:4326`. Because the requested CRS uses geographic degrees, `resx` and `resy` must also be expressed in degrees rather than meters.
 
-Do not implement NDVI until the source strategy has been selected.
+The first test incorrectly used `100` (interpreted as ~100 degrees/pixel - larger than Kenya's geographic extent). Sentinel Hub's error response allowed the resolution to be recalculated.
 
-The AI working on GeoShield should first inspect the existing Sentinel-2 and VIIRS/FIRMS connectors and preserve the established Main Engine architecture rather than creating a separate, duplicate acquisition system.
+The corrected value, `0.01°` (~1.1 km at Kenyan latitude, below the 1500m limit), was applied to the real connector file and is confirmed working.
 
-### Remaining GeoShield Engines
+#### Full 47-County Live Validation - CONFIRMED
 
-After Agriculture is completed:
+`test_all_counties.py` was rebuilt to use the corrected `0.01°` resolution (the earlier isolated test script had a stale hardcoded `0.05` value that was retesting the old broken configuration, not a real connector bug).
+
+Result of the full live sweep:
+
+    Connector enabled: True
+    Success: True
+    Elapsed seconds: 107.1
+    Total counties: 47
+    Counties with real NDVI: 47
+    Counties with null NDVI: 0
+
+Sample values (first 10):
+
+    Turkana: 0.1042
+    Marsabit: 0.0904
+    Mandera: 0.1593
+    Wajir: 0.0992
+    West Pokot: 0.2532
+    Samburu: 0.1842
+    Isiolo: 0.1313
+    Baringo: 0.2590
+    Keiyo-Marakwet: 0.4127
+    Trans Nzoia: 0.4683
+
+All 47 counties returned physically plausible values: arid northern counties (Turkana, Marsabit, Mandera, Wajir) scored low, while Trans Nzoia - Kenya's wheat/maize breadbasket - scored high. NDVI is confirmed live end to end, not mock/fallback data.
+
+#### Cold-Start Latency - Identified and Mitigated
+
+A full 47-county sweep takes ~107 seconds (each Sentinel Hub Statistical API call is a real satellite-data computation, not a simple lookup). Left unmitigated, this meant the first `/api/agriculture/live` request after each 180-minute cache expiry would block for ~107 seconds.
+
+Mitigation implemented: a background warm-up thread refreshes the NDVI cache every 170 minutes (just under the connector's 180-minute `CACHE_MINUTES` window), so live requests always hit the fast cached path.
+
+#### RiskEngine - Rebalanced for NDVI - PATCHED
+
+`core/risk_engine.py` -> `calculate_agriculture_risk()` has been rebalanced from 3 factors to 4 factors (rainfall, temperature, humidity, NDVI), with each factor's weight shrunk proportionally so the existing Low/Moderate/High/Extreme thresholds still mean the same thing.
+
+NDVI scoring (lower NDVI = sparser/more stressed vegetation = higher risk contribution):
+
+    NDVI is None   -> +10
+    NDVI < 0.15    -> +25
+    NDVI < 0.25    -> +17
+    NDVI < 0.35    -> +8
+    else           -> +3
+
+**Note:** this genuinely changes the risk numbers for existing counties versus the old 3-factor scoring. That is expected and correct - it reflects real vegetation health now being factored in, not a bug.
+
+Status: **patched successfully** (`risk_engine.py (calculate_agriculture_risk + NDVI)`).
+
+#### AgricultureIntelligenceEngine - NDVI Merge - PATCHED
+
+`backend/disaster/agriculture_engine.py` -> `analyse()` now calls `main_engine.get_sentinel2_ndvi()` alongside the existing `get_gpm_rainfall()` and `get_era5_weather()` calls, merges NDVI per county into each record, and passes it through to `calculate_agriculture_risk()`.
+
+The engine's `satellites` list was also updated:
+
+    ["GPM-IMERG", "ERA5-OpenMeteo"] -> ["GPM-IMERG", "ERA5-OpenMeteo", "Sentinel2-NDVI"]
+
+Status: **patched successfully** (`agriculture_engine.py (analyse + NDVI)`, `agriculture_engine.py (satellites list)`).
+
+#### Background NDVI Warm-Up Thread - PATCHED
+
+`backend/main.py` now starts a daemon thread on FastAPI startup (`@app.on_event("startup")`) that calls `main_engine.get_sentinel2_ndvi()` every 170 minutes, logging `[NDVI Warmup] Refreshing Sentinel-2 NDVI cache...` and `[NDVI Warmup] Done -- mode=..., counties=...` on each cycle.
+
+Status: **patched successfully** (`main.py (threading/time imports)`, `main.py (NDVI warmup thread)`).
+
+### Current Status
+
+**All NDVI wiring patches have been applied.** The reported patch run completed with:
+
+    risk_engine.py (calculate_agriculture_risk + NDVI): patched successfully.
+    agriculture_engine.py (analyse + NDVI): patched successfully.
+    agriculture_engine.py (satellites list): patched successfully.
+    main.py (threading/time imports): patched successfully.
+    main.py (NDVI warmup thread): patched successfully.
+    ALL NDVI WIRING PATCHES APPLIED.
+
+### Immediate Next Step
+
+The patches have been applied but **not yet confirmed running end-to-end after a server restart**. The remaining verification steps are:
+
+1. Restart the server: `uvicorn backend.main:app --reload --port 8000`.
+2. Confirm `[NDVI Warmup] Refreshing Sentinel-2 NDVI cache...` appears in the log at startup.
+3. Confirm `[NDVI Warmup] Done -- mode=live, counties=47` appears ~107 seconds later.
+4. Confirm `/api/agriculture/live` returns instantly (not blocking ~107s) and includes an `ndvi` value and `ndvi_mode` per county.
+5. Spot-check that risk severities for a few counties reflect the new 4-factor scoring (expect changes from the old 3-factor baseline - this is expected, not a bug).
+
+Do not treat this step as optional - the patches were applied by editing source files directly; they have not yet been proven live after a restart.
+
+### Files Involved in NDVI Development
+
+| File | Role |
+|---|---|
+| `core\connectors\sentinel2\sentinel2_ndvi_connector.py` | Sentinel-2 NDVI connector using Statistical API calls, per-county processing and caching. Confirmed live/working (47/47 counties). |
+| `core\engines\main_engine.py` | NDVI connector import, registration and `get_sentinel2_ndvi()` method. Confirmed working. |
+| `core\auth\copernicus.py` | Existing Copernicus OAuth2 authentication; reused unchanged. |
+| `frontend\static\data\kenya_counties.geojson` | Existing county boundary source; reused unchanged from the GPM workflow. |
+| `core\risk_engine.py` | Patched - `calculate_agriculture_risk()` rebalanced to 4 factors including NDVI. |
+| `backend\disaster\agriculture_engine.py` | Patched - `analyse()` pulls and merges NDVI per county; `satellites` list updated. |
+| `backend\main.py` | Patched - background NDVI cache warm-up thread added on startup. |
+| `test_one_county.py` | Superseded - historically contained a stale hardcoded `0.05` resolution; no longer the source of truth. |
+| `test_all_counties.py` | Rebuilt with corrected `0.01°` resolution; confirmed 47/47 counties returning real NDVI in 107.1s. |
+| *(future)* VIIRS-VI connector | Not started; deferred until Sentinel-2 NDVI is proven live post-restart. |
+| *(future)* MODIS-VI connector | Not started; deferred until Sentinel-2 NDVI is proven live post-restart. |
+
+### Agriculture Engine Development Sequence
+
+    Fix test script                                   [DONE]
+      -> Confirm real NDVI value for one county        [DONE]
+      -> Confirm real NDVI across all 47 counties       [DONE - 107.1s, 47/47]
+      -> Extend RiskEngine with NDVI                    [DONE - patched]
+      -> Extend AgricultureIntelligenceEngine to merge
+         NDVI per county                                [DONE - patched]
+      -> Add background cache warm-up (cold-start fix)  [DONE - patched]
+      -> Restart server & confirm live end-to-end        [PENDING - next step]
+      -> Build VIIRS-VI connector                        [NOT STARTED]
+      -> Build MODIS-VI connector                        [NOT STARTED]
+      -> Implement multi-source fusion and confidence
+         logic                                           [NOT STARTED]
+      -> Build live NDVI/risk map layer                  [NOT STARTED]
+      -> Build Agriculture risk table UI                 [NOT STARTED]
+
+Only proceed to the next stage after the current stage has been verified.
+
+### Remaining GeoShield Development
+
+After the Agriculture Engine is fully completed:
 
 1. Analytics Engine
 2. Reports Engine
 3. Alerts Engine
-4. AI Engine — final integration
+4. AI Engine - final integration
 
-### Open Infrastructure Issue — Not Blocking Agriculture
+### Important Agriculture Development Rules
 
-`data\roads\ken_roads.shp` is still missing.
-
-Previous acquisition attempts failed:
-
-- ICPAC source unavailable.
-- UC Davis DIVA-GIS source unavailable.
-
-The roads dataset is required by existing Earthquake/Fire functionality during full application startup.
-
-This is an application infrastructure/data dependency and is **not an Agriculture Engine failure**.
-
-### Agriculture Development Rule
-
-Agriculture development should continue from the existing verified implementation.
-
-- Preserve the Main Engine as the central communication/orchestration layer.
-- Do not rebuild completed Agriculture components without a technical reason.
-- Do not invent or assume an NDVI provider has been selected.
-- Inspect existing Sentinel-2 and VIIRS/FIRMS infrastructure before implementing a new connector.
+- Preserve the Main Engine as the central communication/orchestration architecture.
+- Preserve the existing working Agriculture risk and decision logic.
+- Do not rebuild the Sentinel-2 NDVI connector unnecessarily.
+- Do not treat the stale `test_one_county.py` resolution as a failure of the actual connector.
+- Do not begin VIIRS-VI or MODIS-VI implementation until Sentinel-2 NDVI is fully proven live **after the server restart verification step above**.
+- Reuse existing Copernicus authentication infrastructure.
+- Reuse existing county boundary infrastructure.
+- Do not create duplicate acquisition/authentication systems when existing GeoShield infrastructure already provides the required capability.
 - Do not modify Copernicus/Sentinel infrastructure unnecessarily.
-- Do not remove this Agriculture status section until the Agriculture Engine is officially declared complete.
+- Do not remove this Agriculture NDVI status until the Agriculture Engine is officially declared complete.

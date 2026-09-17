@@ -1,0 +1,730 @@
+﻿===== NDVI/AGRICULTURE DUMP =====
+
+===== core\connectors\sentinel2\sentinel2_ndvi_connector.py =====
+
+"""
+GeoShield Sentinel-2 NDVI Connector
+
+Real per-county NDVI (vegetation health) via Copernicus Data Space's
+Sentinel Hub Statistical API. Reuses the existing CopernicusAuthManager
+OAuth2 token (curl-based, Schannel) -- the same auth already proven
+working for the Sentinel-2 WMS tile layer.
+
+Unlike the WMS tile layer (visual only), the Statistical API returns
+real numeric NDVI values aggregated per county polygon, which is what
+the Agriculture risk table needs.
+
+Implements the standard GeoShield BaseConnector interface, mirroring
+GPMConnector's caching/zonal-per-county shape.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import tempfile
+import time
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
+
+import geopandas as gpd
+
+from core.auth.copernicus import CopernicusAuthManager
+from core.auth.exceptions import (
+    CopernicusAuthenticationError,
+    CopernicusConfigurationError,
+    CopernicusNetworkError,
+)
+from core.config import settings
+from ..base_connector import BaseConnector
+from ..connector_config import ConnectorConfig
+from ..connector_result import ConnectorResult
+
+STATISTICS_URL = "https://sh.dataspace.copernicus.eu/api/v1/statistics"
+COUNTIES_GEOJSON = Path("frontend/static/data/kenya_counties.geojson")
+CACHE_MINUTES = 180
+LOOKBACK_DAYS = 14
+MAX_CLOUD_COVERAGE = 50
+
+NDVI_EVALSCRIPT = """//VERSION=3
+function setup() {
+  return {
+    input: [{bands: ["B04", "B08", "dataMask"]}],
+    output: [
+      {id: "data", bands: 1, sampleType: "FLOAT32"},
+      {id: "dataMask", bands: 1}
+    ]
+  };
+}
+function evaluatePixel(sample) {
+  var denom = sample.B08 + sample.B04;
+  var ndvi = denom === 0 ? 0 : (sample.B08 - sample.B04) / denom;
+  return {
+    data: [ndvi],
+    dataMask: [sample.dataMask]
+  };
+}"""
+
+
+def _curl_post_json(url: str, token: str, payload: dict, timeout: float) -> tuple[bool, str]:
+    """POST a JSON payload via curl.exe with a Bearer token. Returns (success, text_or_error)."""
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as f:
+        json.dump(payload, f)
+        payload_path = f.name
+
+    cmd = [
+        "curl.exe", "-s", "--max-time", str(int(timeout)),
+        "-X", "POST", url,
+        "-H", f"Authorization: Bearer {token}",
+        "-H", "Content-Type: application/json",
+        "--data", f"@{payload_path}",
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 10)
+
+    except (subprocess.SubprocessError, OSError) as exc:
+        return False, f"curl failed to run: {exc}"
+
+    finally:
+        try:
+            Path(payload_path).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    if result.returncode != 0:
+        return False, f"curl exited with code {result.returncode}: {result.stderr}"
+
+    return True, result.stdout
+
+
+class Sentinel2NDVIConnector(BaseConnector):
+    """Sentinel-2 NDVI connector via Copernicus Sentinel Hub Statistical API."""
+
+    def __init__(self, config: ConnectorConfig) -> None:
+        super().__init__(config)
+        self._auth = CopernicusAuthManager()
+        self._cache: dict[str, Any] | None = None
+        self._cache_time: float = 0.0
+
+    @property
+    def provider_name(self) -> str:
+        return "Sentinel2-NDVI"
+
+    def connect(self) -> ConnectorResult:
+        try:
+            self._auth.get_token()
+
+        except (CopernicusAuthenticationError, CopernicusConfigurationError, CopernicusNetworkError) as exc:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="connect",
+                error=str(exc),
+            )
+
+        return ConnectorResult.ok(provider=self.provider_name, operation="connect", data={"reachable": True})
+
+    def _county_geometries(self) -> list[tuple[str, dict]]:
+        counties = gpd.read_file(COUNTIES_GEOJSON)
+        out: list[tuple[str, dict]] = []
+
+        for _, row in counties.iterrows():
+            name = row.get("COUNTY") or row.get("NAME") or row.get("name")
+
+            if not name:
+                continue
+
+            out.append((name, row.geometry.__geo_interface__))
+
+        return out
+
+    def _query_county_ndvi(self, token: str, geometry: dict, date_from: str, date_to: str) -> float | None:
+        payload = {
+            "input": {
+                "bounds": {
+                    "geometry": geometry,
+                    "properties": {"crs": "http://www.opengis.net/def/crs/EPSG/0/4326"},
+                },
+                "data": [
+                    {
+                        "type": "sentinel-2-l2a",
+                        "dataFilter": {"maxCloudCoverage": MAX_CLOUD_COVERAGE},
+                    }
+                ],
+            },
+            "aggregation": {
+                "timeRange": {"from": date_from, "to": date_to},
+                "aggregationInterval": {"of": f"P{LOOKBACK_DAYS}D"},
+                "evalscript": NDVI_EVALSCRIPT,
+                "resx": 0.01,
+                "resy": 0.01,
+            },
+        }
+
+        ok, text = _curl_post_json(STATISTICS_URL, token, payload, min(settings.http_timeout, 45))
+
+        if not ok:
+            return None
+
+        try:
+            body = json.loads(text)
+            intervals = body.get("data", [])
+
+            for interval in intervals:
+                stats = (
+                    interval.get("outputs", {})
+                    .get("data", {})
+                    .get("bands", {})
+                    .get("B0", {})
+                    .get("stats", {})
+                )
+
+                sample_count = stats.get("sampleCount", 0)
+                mean = stats.get("mean")
+
+                if sample_count and mean is not None:
+                    return round(float(mean), 4)
+
+            return None
+
+        except (ValueError, KeyError, TypeError):
+            return None
+
+    def search(self, **filters: Any) -> ConnectorResult:
+        now = time.time()
+
+        if self._cache is not None and (now - self._cache_time) < (CACHE_MINUTES * 60):
+            return ConnectorResult.ok(
+                provider=self.provider_name,
+                operation="search",
+                data=self._cache,
+                metadata={"cached": True, "cache_age_seconds": round(now - self._cache_time)},
+            )
+
+        try:
+            token = self._auth.get_token()
+
+        except (CopernicusAuthenticationError, CopernicusConfigurationError, CopernicusNetworkError) as exc:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="search",
+                error=str(exc),
+            )
+
+        date_to = datetime.now(timezone.utc)
+        date_from = date_to - timedelta(days=LOOKBACK_DAYS)
+        date_to_str = date_to.strftime("%Y-%m-%dT%H:%M:%SZ")
+        date_from_str = date_from.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        try:
+            counties = self._county_geometries()
+
+        except Exception as exc:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="search",
+                error=f"Failed to load county boundaries: {exc}",
+            )
+
+        results: dict[str, float | None] = {}
+
+        for name, geometry in counties:
+            ndvi = self._query_county_ndvi(token, geometry, date_from_str, date_to_str)
+            results[name] = ndvi
+
+        self._cache = results
+        self._cache_time = now
+
+        return ConnectorResult.ok(
+            provider=self.provider_name,
+            operation="search",
+            data=results,
+            metadata={"cached": False, "lookback_days": LOOKBACK_DAYS},
+        )
+
+    def download(self, product_id: str) -> ConnectorResult:
+        return ConnectorResult.failure(
+            provider=self.provider_name,
+            operation="download",
+            error="Sentinel2-NDVI does not support per-product downloads; use search() instead.",
+        )
+
+
+def build_sentinel2_ndvi_connector() -> Sentinel2NDVIConnector:
+    """Factory: builds a Sentinel2NDVIConnector wired to GeoShield settings."""
+
+    config = ConnectorConfig(
+        connector_id="sentinel2_ndvi",
+        provider="Copernicus-SentinelHub",
+        enabled=bool(settings.cdse_username and settings.cdse_password and settings.cdse_client_id),
+        base_url=STATISTICS_URL,
+        timeout=settings.http_timeout,
+        credentials={},
+    )
+    return Sentinel2NDVIConnector(config)
+
+
+===== test_one_county.py =====
+
+from core.connectors.sentinel2.sentinel2_ndvi_connector import STATISTICS_URL, NDVI_EVALSCRIPT, MAX_CLOUD_COVERAGE, _curl_post_json
+from core.auth.copernicus import CopernicusAuthManager
+import geopandas as gpd
+from datetime import datetime, timedelta, timezone
+
+auth = CopernicusAuthManager()
+token = auth.get_token()
+
+counties = gpd.read_file('frontend/static/data/kenya_counties.geojson')
+row = counties.iloc[0]
+name = row.get('COUNTY') or row.get('NAME') or row.get('name')
+geometry = row.geometry.__geo_interface__
+
+date_to = datetime.now(timezone.utc)
+date_from = date_to - timedelta(days=14)
+
+payload = {
+    'input': {
+        'bounds': {'geometry': geometry, 'properties': {'crs': 'http://www.opengis.net/def/crs/EPSG/0/4326'}},
+        'data': [{'type': 'sentinel-2-l2a', 'dataFilter': {'maxCloudCoverage': MAX_CLOUD_COVERAGE}}],
+    },
+    'aggregation': {
+        'timeRange': {'from': date_from.strftime('%Y-%m-%dT%H:%M:%SZ'), 'to': date_to.strftime('%Y-%m-%dT%H:%M:%SZ')},
+        'aggregationInterval': {'of': 'P14D'},
+        'evalscript': NDVI_EVALSCRIPT,
+        'resx': 0.05, 'resy': 0.05,
+    },
+}
+
+ok, text = _curl_post_json(STATISTICS_URL, token, payload, 45)
+print('County:', name)
+print('RAW RESPONSE:', text[:3000])
+
+
+===== backend\disaster\agriculture_engine.py =====
+
+"""
+GeoShield Agriculture Intelligence Engine
+
+Combines live GPM rainfall and ERA5 weather (temperature, humidity)
+per county via the Main Engine's connectors, scores agricultural/
+drought risk, and attaches a decision recommendation -- mirroring
+EarthquakeIntelligenceEngine's pipeline shape.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+
+from core.decision_engine import DecisionEngine
+from core.engines.main_engine import main_engine
+from core.risk_engine import RiskEngine
+
+
+class AgricultureIntelligenceEngine:
+    """Main agriculture intelligence processing engine."""
+
+    def __init__(self) -> None:
+        self.risk = RiskEngine()
+        self.decision = DecisionEngine()
+
+    def analyse(self) -> list[dict[str, Any]]:
+        rainfall = main_engine.get_gpm_rainfall()
+        weather = main_engine.get_era5_weather()
+
+        rainfall_counties = rainfall.get("counties", {})
+        weather_counties = weather.get("counties", {})
+
+        all_counties = set(rainfall_counties.keys()) | set(weather_counties.keys())
+
+        enriched: list[dict[str, Any]] = []
+
+        for county in sorted(all_counties):
+            weather_data = weather_counties.get(county, {})
+
+            record = {
+                "county": county,
+                "rainfall_mm": rainfall_counties.get(county),
+                "temperature_c": weather_data.get("temperature_c"),
+                "humidity_pct": weather_data.get("humidity_pct"),
+                "wind_speed_kmh": weather_data.get("wind_speed_kmh"),
+                "rainfall_mode": rainfall.get("mode"),
+                "weather_mode": weather.get("mode"),
+            }
+
+            risk = self.risk.calculate_agriculture_risk(record)
+            decision = self.decision.recommend_agriculture(risk)
+
+            enriched.append({
+                **record,
+                **risk,
+                **decision,
+            })
+
+        return enriched
+
+    def get_summary(self, county: str | None = None) -> dict[str, Any]:
+        """Called by MainEngine.get_hazard_summary('agriculture', county=...)."""
+
+        records = self.analyse()
+
+        if county:
+            records = [r for r in records if r.get("county") == county]
+
+        severity_rank = {"Low": 0, "Moderate": 1, "High": 2, "Extreme": 3}
+        risk_level = max(
+            (r["severity"] for r in records),
+            default="Low",
+            key=lambda s: severity_rank[s],
+        )
+
+        return {
+            "hazard": "agriculture",
+            "county": county or "All 47 Counties",
+            "status": "monitored",
+            "satellites": ["GPM-IMERG", "ERA5-OpenMeteo"],
+            "risk_level": risk_level,
+            "county_count": len(records),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+
+agriculture_engine = AgricultureIntelligenceEngine()
+
+
+===== backend\api\agriculture_api.py =====
+
+from __future__ import annotations
+from fastapi import APIRouter, Query
+from backend.disaster.agriculture_engine import agriculture_engine
+
+router = APIRouter(prefix="/api/agriculture", tags=["agriculture"])
+
+@router.get("/live")
+def live_agriculture():
+    return agriculture_engine.analyse()
+
+@router.get("/summary")
+def agriculture_summary(county: str = Query(default=None)):
+    return agriculture_engine.get_summary(county=county)
+
+
+===== core\risk_engine.py =====
+
+class RiskEngine:
+
+    def calculate_fire_risk(self, fire):
+
+        score = 0
+
+        # Brightness
+        if fire["brightness"] >= 360:
+            score += 40
+        elif fire["brightness"] >= 340:
+            score += 30
+        else:
+            score += 20
+
+        # Fire Radiative Power
+        if fire["frp"] >= 10:
+            score += 30
+        elif fire["frp"] >= 5:
+            score += 20
+        else:
+            score += 10
+
+        # Confidence
+        confidence = fire["confidence"].lower()
+
+        if confidence == "h":
+            score += 30
+        elif confidence == "n":
+            score += 20
+        else:
+            score += 10
+
+        # Severity Classification
+        if score >= 90:
+            severity = "Extreme"
+
+        elif score >= 70:
+            severity = "High"
+
+        elif score >= 50:
+            severity = "Moderate"
+
+        else:
+            severity = "Low"
+
+        return {
+
+            "risk_score": score,
+
+            "severity": severity
+
+        }
+
+    def calculate_earthquake_risk(self, event):
+
+        magnitude = event.get("magnitude") or 0
+        depth_km = event.get("depth_km")
+        population = event.get("population_exposed")
+
+        score = 0
+
+        # Magnitude
+        if magnitude >= 7.0:
+            score += 40
+        elif magnitude >= 6.0:
+            score += 32
+        elif magnitude >= 5.0:
+            score += 22
+        elif magnitude >= 4.0:
+            score += 12
+        else:
+            score += 5
+
+        # Depth -- shallower quakes cause more surface damage
+        if depth_km is not None:
+            if depth_km <= 10:
+                score += 30
+            elif depth_km <= 35:
+                score += 20
+            elif depth_km <= 70:
+                score += 10
+            else:
+                score += 5
+        else:
+            score += 10
+
+        # Population exposure within the search radius
+        if population is not None:
+            if population >= 1_000_000:
+                score += 30
+            elif population >= 250_000:
+                score += 22
+            elif population >= 50_000:
+                score += 14
+            elif population >= 5_000:
+                score += 7
+            else:
+                score += 2
+        else:
+            score += 5
+
+        if score >= 90:
+            severity = "Extreme"
+        elif score >= 70:
+            severity = "High"
+        elif score >= 50:
+            severity = "Moderate"
+        else:
+            severity = "Low"
+
+        return {
+            "risk_score": score,
+            "severity": severity,
+        }
+    def calculate_agriculture_risk(self, record):
+
+        rainfall_mm = record.get("rainfall_mm")
+        temperature_c = record.get("temperature_c")
+        humidity_pct = record.get("humidity_pct")
+
+        score = 0
+
+        if rainfall_mm is None:
+            score += 15
+        elif rainfall_mm < 1:
+            score += 40
+        elif rainfall_mm < 5:
+            score += 30
+        elif rainfall_mm < 15:
+            score += 15
+        else:
+            score += 5
+
+        if temperature_c is None:
+            score += 10
+        elif temperature_c >= 35:
+            score += 30
+        elif temperature_c >= 30:
+            score += 20
+        elif temperature_c >= 25:
+            score += 10
+        else:
+            score += 5
+
+        if humidity_pct is None:
+            score += 10
+        elif humidity_pct < 30:
+            score += 30
+        elif humidity_pct < 50:
+            score += 20
+        elif humidity_pct < 70:
+            score += 10
+        else:
+            score += 5
+
+        if score >= 90:
+            severity = "Extreme"
+        elif score >= 70:
+            severity = "High"
+        elif score >= 50:
+            severity = "Moderate"
+        else:
+            severity = "Low"
+
+        return {
+            "risk_score": score,
+            "severity": severity,
+        }
+
+
+===== core\decision_engine.py =====
+
+class DecisionEngine:
+
+    def __init__(self):
+        pass
+
+    def recommend(self, event):
+
+        severity = event["severity"]
+
+        actions = []
+
+        if severity == "Low":
+
+            actions = [
+
+                "Monitor situation",
+
+                "Log event"
+
+            ]
+
+        elif severity == "Moderate":
+
+            actions = [
+
+                "Notify County Disaster Office",
+
+                "Notify Fire Department",
+
+                "Increase Monitoring"
+
+            ]
+
+        elif severity == "High":
+
+            actions = [
+
+                "Dispatch Fire Brigade",
+
+                "Notify NDMA",
+
+                "Notify Police",
+
+                "Prepare Evacuation Teams"
+
+            ]
+
+        elif severity == "Extreme":
+
+            actions = [
+
+                "Dispatch Fire Brigade Immediately",
+
+                "Notify National Disaster Operations Centre",
+
+                "Deploy Aerial Surveillance",
+
+                "Issue Public Warning",
+
+                "Prepare Medical Response",
+
+                "Prepare Evacuation"
+
+            ]
+
+        return {
+
+            "recommended_actions": actions
+
+        }
+
+    def recommend_earthquake(self, event):
+
+        severity = event["severity"]
+
+        if severity == "Low":
+            actions = ["Log event", "Monitor for aftershocks"]
+
+        elif severity == "Moderate":
+            actions = [
+                "Notify County Disaster Office",
+                "Alert nearby emergency services",
+                "Monitor for aftershocks",
+            ]
+
+        elif severity == "High":
+            actions = [
+                "Notify National Disaster Operations Centre",
+                "Dispatch damage assessment teams",
+                "Alert hospitals in the affected county",
+                "Prepare emergency shelters",
+            ]
+
+        elif severity == "Extreme":
+            actions = [
+                "Activate National Disaster Response",
+                "Deploy Search and Rescue Teams",
+                "Alert all hospitals and emergency services",
+                "Issue Public Warning",
+                "Prepare mass evacuation and shelter",
+                "Request international assistance if needed",
+            ]
+
+        else:
+            actions = ["Monitor situation"]
+
+        return {"recommended_actions": actions}
+    def recommend_agriculture(self, event):
+
+        severity = event["severity"]
+
+        if severity == "Low":
+            actions = ["Monitor conditions", "Log county status"]
+
+        elif severity == "Moderate":
+            actions = [
+                "Notify County Agriculture Office",
+                "Advise farmers on irrigation",
+                "Increase monitoring frequency",
+            ]
+
+        elif severity == "High":
+            actions = [
+                "Notify Ministry of Agriculture",
+                "Issue drought/crop-stress advisory",
+                "Coordinate water resource allocation",
+                "Assess food security risk in county",
+            ]
+
+        elif severity == "Extreme":
+            actions = [
+                "Declare county agricultural emergency",
+                "Activate National Drought Management Authority",
+                "Prioritize emergency water and feed distribution",
+                "Issue public food-security warning",
+                "Request humanitarian/relief support",
+            ]
+
+        else:
+            actions = ["Monitor situation"]
+
+        return {"recommended_actions": actions}
+

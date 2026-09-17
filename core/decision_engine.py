@@ -105,3 +105,38 @@ class DecisionEngine:
             actions = ["Monitor situation"]
 
         return {"recommended_actions": actions}
+    def recommend_agriculture(self, event):
+
+        severity = event["severity"]
+
+        if severity == "Low":
+            actions = ["Monitor conditions", "Log county status"]
+
+        elif severity == "Moderate":
+            actions = [
+                "Notify County Agriculture Office",
+                "Advise farmers on irrigation",
+                "Increase monitoring frequency",
+            ]
+
+        elif severity == "High":
+            actions = [
+                "Notify Ministry of Agriculture",
+                "Issue drought/crop-stress advisory",
+                "Coordinate water resource allocation",
+                "Assess food security risk in county",
+            ]
+
+        elif severity == "Extreme":
+            actions = [
+                "Declare county agricultural emergency",
+                "Activate National Drought Management Authority",
+                "Prioritize emergency water and feed distribution",
+                "Issue public food-security warning",
+                "Request humanitarian/relief support",
+            ]
+
+        else:
+            actions = ["Monitor situation"]
+
+        return {"recommended_actions": actions}

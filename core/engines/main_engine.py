@@ -19,6 +19,10 @@ from core.connectors.gpm_connector import build_gpm_connector
 from core.connectors.era5_connector import build_era5_connector
 from core.connectors.earthquake_connector import build_earthquake_connector
 from core.connectors.population_connector import build_population_connector
+from core.connectors.sentinel2.sentinel2_ndvi_connector import build_sentinel2_ndvi_connector
+from core.event_bus import EventBus
+from core.risk_engine import RiskEngine
+from engines.risk_alert_engine import build_risk_alert_engine
 
 _auth_manager = CopernicusAuthManager()
 DB_PATH = Path("database/geoshield.db")
@@ -31,6 +35,7 @@ def _build_connector_registry() -> ConnectorRegistry:
     registry.register(build_era5_connector())
     registry.register(build_earthquake_connector())
     registry.register(build_population_connector())
+    registry.register(build_sentinel2_ndvi_connector())
     return registry
 
 
@@ -45,8 +50,36 @@ class MainEngine:
         self.connectors = _connector_registry
         self._last_status: dict[str, dict] = {}
 
+        # Central GeoShield alert infrastructure.
+        # Hazard-specific risk formulas remain in RiskEngine.
+        self.risk_engine = RiskEngine()
+        self.event_bus = EventBus()
+        self.risk_alert_engine = build_risk_alert_engine(
+            self.risk_engine,
+            self.event_bus,
+        )
+
     def register_engine(self, name: str, engine_instance: Any):
         self.registered_engines[name] = engine_instance
+
+    def evaluate_alert(
+        self,
+        hazard: str,
+        event: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Evaluate a hazard event through the central RiskAlertEngine."""
+        return self.risk_alert_engine.evaluate(
+            hazard=hazard,
+            event=event,
+        )
+
+    def get_alert_history(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Return the latest standardized GeoShield alerts."""
+        return self.risk_alert_engine.latest(limit)
+
+    def get_event_history(self) -> list[dict[str, Any]]:
+        """Return events published through the central EventBus."""
+        return self.event_bus.history()
 
     def get_live_tile_layer(self, layer: str = "TRUE-COLOR-S2L2A") -> dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
@@ -275,6 +308,45 @@ class MainEngine:
         }
         self._last_status["population"] = result
         return result
+
+    def get_sentinel2_ndvi(self) -> dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        connector = self.connectors.get("Sentinel2-NDVI")
+
+        if connector is None or not connector.is_enabled():
+            result = {
+                "mode": "mock",
+                "provider": "Sentinel2-NDVI",
+                "counties": {},
+                "checked_at": now,
+            }
+            self._last_status["sentinel2_ndvi"] = result
+            return result
+
+        result_obj = connector.search()
+
+        if not result_obj.success:
+            print(f"[MainEngine] Sentinel2-NDVI search failed: {result_obj.error}")
+            result = {
+                "mode": "mock",
+                "provider": "Sentinel2-NDVI",
+                "counties": {},
+                "error": result_obj.error,
+                "checked_at": now,
+            }
+            self._last_status["sentinel2_ndvi"] = result
+            return result
+
+        result = {
+            "mode": "live",
+            "provider": "Sentinel2-NDVI",
+            "counties": result_obj.data,
+            "cached": result_obj.metadata.get("cached", False),
+            "checked_at": now,
+        }
+        self._last_status["sentinel2_ndvi"] = result
+        return result
+
 
     def get_satellite_live_status(self, satellite_id: str) -> dict[str, Any] | None:
         """Return the last-known live status for a satellite without triggering a fresh call."""

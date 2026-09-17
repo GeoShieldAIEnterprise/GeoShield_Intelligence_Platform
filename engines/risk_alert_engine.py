@@ -1,177 +1,330 @@
-import geopandas as gpd
-import os
+﻿"""
+GeoShield AI Enterprise
+Central Risk Alert Engine
+
+Coordinates hazard-specific risk evaluation and converts risk results
+into standardized GeoShield alerts.
+
+Actual risk calculations remain in core.risk_engine.RiskEngine.
+This module is responsible for:
+    - registering hazard handlers
+    - evaluating hazards
+    - standardizing alerts
+    - publishing alerts to EventBus
+    - maintaining alert history
+"""
+
+from __future__ import annotations
+
 from datetime import datetime, timezone
+from typing import Any, Callable
 
-INPUT = "data/ndvi/vegetation_risk_intelligence.geojson"
-OUTPUT = "data/ndvi/geoshield_risk_alerts.geojson"
 
-print("===== GEOSHIELD RISK ALERT ENGINE =====")
+class RiskAlertEngine:
+    """
+    Central registry and coordinator for GeoShield risk alerts.
 
-gdf = gpd.read_file(INPUT)
+    Hazard-specific risk calculations are delegated to registered
+    handlers. The RiskAlertEngine does not duplicate risk formulas.
+    """
 
-print("Input:", INPUT)
-print("Risk areas loaded:", len(gdf))
-print("CRS:", gdf.crs)
+    def __init__(self, event_bus=None):
+        self.handlers: dict[str, Callable[[dict], dict]] = {}
+        self.alert_history: list[dict] = []
+        self.event_bus = event_bus
+
+    # ---------------------------------------------------------
+    # HAZARD REGISTRATION
+    # ---------------------------------------------------------
+
+    def register(
+        self,
+        hazard: str,
+        risk_handler: Callable[[dict], dict],
+    ) -> None:
+        """
+        Register a hazard and its risk-calculation handler.
+        """
+
+        hazard_name = hazard.strip().lower()
+
+        if not hazard_name:
+            raise ValueError("Hazard name cannot be empty.")
+
+        if not callable(risk_handler):
+            raise TypeError(
+                f"Risk handler for '{hazard_name}' must be callable."
+            )
+
+        self.handlers[hazard_name] = risk_handler
+
+    def unregister(self, hazard: str) -> None:
+        """Remove a registered hazard."""
+
+        self.handlers.pop(
+            hazard.strip().lower(),
+            None,
+        )
+
+    def exists(self, hazard: str) -> bool:
+        """Return whether a hazard is registered."""
+
+        return hazard.strip().lower() in self.handlers
+
+    def list_hazards(self) -> list[str]:
+        """Return all registered hazards."""
+
+        return list(self.handlers.keys())
+
+    # ---------------------------------------------------------
+    # RISK EVALUATION
+    # ---------------------------------------------------------
+
+    def evaluate(
+        self,
+        hazard: str,
+        event: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Evaluate a hazard and produce a standardized GeoShield alert.
+        """
+
+        hazard_name = hazard.strip().lower()
+
+        if hazard_name not in self.handlers:
+            raise ValueError(
+                f"No risk handler registered for hazard: {hazard_name}"
+            )
+
+        if not isinstance(event, dict):
+            raise TypeError("Event must be a dictionary.")
+
+        risk_result = self.handlers[hazard_name](event)
+
+        if not isinstance(risk_result, dict):
+            raise TypeError(
+                f"Risk handler for '{hazard_name}' must return a dictionary."
+            )
+
+        risk_score = float(
+            risk_result.get("risk_score", 0)
+        )
+
+        severity = risk_result.get(
+            "severity",
+            self.classify_severity(risk_score),
+        )
+
+        timestamp = datetime.now(
+            timezone.utc
+        ).isoformat()
+
+        alert = {
+            "alert_id": self._generate_alert_id(
+                hazard_name
+            ),
+            "hazard": hazard_name,
+            "risk_score": risk_score,
+            "severity": severity,
+            "latitude": event.get("latitude"),
+            "longitude": event.get("longitude"),
+            "county": event.get("county"),
+            "message": self.build_message(
+                hazard_name,
+                severity,
+            ),
+            "recommended_action": self.build_action(
+                severity,
+            ),
+            "source": event.get(
+                "source",
+                "GeoShield Intelligence Engine",
+            ),
+            "timestamp": timestamp,
+        }
+
+        # Preserve original risk information.
+        alert["risk"] = risk_result
+
+        # Preserve useful event information.
+        alert["event"] = event
+
+        self.alert_history.append(alert)
+
+        if self.event_bus is not None:
+            self.event_bus.publish(alert)
+
+        return alert
+
+    # ---------------------------------------------------------
+    # SEVERITY
+    # ---------------------------------------------------------
+
+    @staticmethod
+    def classify_severity(
+        risk_score: float,
+    ) -> str:
+
+        if risk_score >= 90:
+            return "Extreme"
+
+        if risk_score >= 70:
+            return "High"
+
+        if risk_score >= 50:
+            return "Moderate"
+
+        return "Low"
+
+    # ---------------------------------------------------------
+    # ALERT MESSAGE
+    # ---------------------------------------------------------
+
+    @staticmethod
+    def build_message(
+        hazard: str,
+        severity: str,
+    ) -> str:
+
+        messages = {
+            "fire": {
+                "Extreme": "Extreme wildfire risk detected.",
+                "High": "High wildfire risk detected.",
+                "Moderate": "Moderate wildfire risk detected.",
+                "Low": "Low wildfire risk detected.",
+            },
+
+            "flood": {
+                "Extreme": "Extreme flood risk detected.",
+                "High": "High flood risk detected.",
+                "Moderate": "Moderate flood risk detected.",
+                "Low": "Low flood risk detected.",
+            },
+
+            "earthquake": {
+                "Extreme": "Extreme earthquake impact risk detected.",
+                "High": "High earthquake impact risk detected.",
+                "Moderate": "Moderate earthquake impact risk detected.",
+                "Low": "Low earthquake impact risk detected.",
+            },
+
+            "agriculture": {
+                "Extreme": "Extreme agricultural stress detected.",
+                "High": "High agricultural stress detected.",
+                "Moderate": "Moderate agricultural stress detected.",
+                "Low": "Low agricultural stress detected.",
+            },
+
+            "vegetation": {
+                "Extreme": "Extreme vegetation stress detected.",
+                "High": "High vegetation stress detected.",
+                "Moderate": "Moderate vegetation stress detected.",
+                "Low": "Low vegetation stress detected.",
+            },
+        }
+
+        return messages.get(
+            hazard,
+            {},
+        ).get(
+            severity,
+            f"{severity} {hazard} risk detected.",
+        )
+
+    # ---------------------------------------------------------
+    # RECOMMENDED ACTION
+    # ---------------------------------------------------------
+
+    @staticmethod
+    def build_action(
+        severity: str,
+    ) -> str:
+
+        actions = {
+            "Extreme": "IMMEDIATE_RESPONSE",
+            "High": "PRIORITY_FIELD_ASSESSMENT",
+            "Moderate": "ENHANCED_MONITORING",
+            "Low": "ROUTINE_MONITORING",
+        }
+
+        return actions.get(
+            severity,
+            "MONITOR",
+        )
+
+    # ---------------------------------------------------------
+    # ALERT ID
+    # ---------------------------------------------------------
+
+    def _generate_alert_id(
+        self,
+        hazard: str,
+    ) -> str:
+
+        return (
+            f"GS-{hazard.upper()}-"
+            f"{len(self.alert_history) + 1:06d}"
+        )
+
+    # ---------------------------------------------------------
+    # HISTORY
+    # ---------------------------------------------------------
+
+    def history(self) -> list[dict]:
+        """Return all alerts generated during this runtime."""
+
+        return list(self.alert_history)
+
+    def latest(
+        self,
+        limit: int = 10,
+    ) -> list[dict]:
+
+        if limit < 1:
+            return []
+
+        return self.alert_history[-limit:]
+
 
 # ---------------------------------------------------------
-# ALERT CLASSIFICATION
+# DEFAULT REGISTRATION
 # ---------------------------------------------------------
 
-def alert_level(row):
+def build_risk_alert_engine(
+    risk_engine,
+    event_bus=None,
+) -> RiskAlertEngine:
+    """
+    Build the GeoShield Risk Alert Engine and register
+    all currently supported risk calculations.
+    """
 
-    risk = float(row["risk_score"])
+    engine = RiskAlertEngine(
+        event_bus=event_bus
+    )
 
-    if risk >= 60:
-        return "CRITICAL"
+    # FIRE
+    engine.register(
+        "fire",
+        risk_engine.calculate_fire_risk,
+    )
 
-    elif risk >= 40:
-        return "HIGH"
+    # EARTHQUAKE
+    engine.register(
+        "earthquake",
+        risk_engine.calculate_earthquake_risk,
+    )
 
-    elif risk >= 20:
-        return "WATCH"
+    # AGRICULTURE
+    engine.register(
+        "agriculture",
+        risk_engine.calculate_agriculture_risk,
+    )
 
-    else:
-        return "INFORMATIONAL"
-
-
-def alert_action(level):
-
-    if level == "CRITICAL":
-        return "IMMEDIATE_RESPONSE"
-
-    elif level == "HIGH":
-        return "FIELD_ASSESSMENT"
-
-    elif level == "WATCH":
-        return "ENHANCED_MONITORING"
-
-    else:
-        return "ROUTINE_MONITORING"
-
-
-def alert_message(level):
-
-    if level == "CRITICAL":
-        return "Severe vegetation stress detected. Immediate assessment recommended."
-
-    elif level == "HIGH":
-        return "Significant vegetation stress detected. Field assessment recommended."
-
-    elif level == "WATCH":
-        return "Vegetation stress detected. Enhanced monitoring recommended."
-
-    else:
-        return "Vegetation condition within low-risk range."
+    return engine
 
 
-# ---------------------------------------------------------
-# GENERATE ALERT ATTRIBUTES
-# ---------------------------------------------------------
-
-gdf["alert_level"] = gdf.apply(
-    alert_level,
-    axis=1
-)
-
-gdf["alert_action"] = gdf["alert_level"].apply(
-    alert_action
-)
-
-gdf["alert_message"] = gdf["alert_level"].apply(
-    alert_message
-)
-
-gdf["alert_id"] = [
-    f"GS-{i:06d}"
-    for i in range(1, len(gdf) + 1)
+__all__ = [
+    "RiskAlertEngine",
+    "build_risk_alert_engine",
 ]
-
-gdf["alert_timestamp"] = datetime.now(
-    timezone.utc
-).isoformat()
-
-# ---------------------------------------------------------
-# PRIORITY ORDER
-# ---------------------------------------------------------
-
-priority_order = {
-    "CRITICAL": 1,
-    "HIGH": 2,
-    "WATCH": 3,
-    "INFORMATIONAL": 4
-}
-
-gdf["alert_priority"] = gdf["alert_level"].map(
-    priority_order
-)
-
-gdf = gdf.sort_values(
-    ["alert_priority", "risk_score"],
-    ascending=[True, False]
-).reset_index(drop=True)
-
-gdf["alert_rank"] = range(
-    1,
-    len(gdf) + 1
-)
-
-# ---------------------------------------------------------
-# SUMMARY
-# ---------------------------------------------------------
-
-print()
-print("===== ALERT SUMMARY =====")
-
-print(
-    "Total alerts:",
-    len(gdf)
-)
-
-print()
-print("===== ALERT DISTRIBUTION =====")
-
-print(
-    gdf["alert_level"].value_counts()
-)
-
-# ---------------------------------------------------------
-# TOP ALERTS
-# ---------------------------------------------------------
-
-print()
-print("===== TOP 10 ALERTS =====")
-
-columns = [
-    "alert_rank",
-    "alert_id",
-    "geometry_area_km2",
-    "mean_ndvi",
-    "risk_score",
-    "risk_class",
-    "alert_level",
-    "alert_action"
-]
-
-print(
-    gdf[columns]
-    .head(10)
-    .to_string(index=False)
-)
-
-# ---------------------------------------------------------
-# OUTPUT
-# ---------------------------------------------------------
-
-os.makedirs(
-    os.path.dirname(OUTPUT),
-    exist_ok=True
-)
-
-gdf.to_file(
-    OUTPUT,
-    driver="GeoJSON"
-)
-
-print()
-print("Output:", OUTPUT)
-print("RISK ALERT ENGINE COMPLETE")

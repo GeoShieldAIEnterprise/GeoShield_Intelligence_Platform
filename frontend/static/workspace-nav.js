@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
     "use strict";
 
     const MAP_PAGE = "geoshieldMapPage";
@@ -8,6 +8,7 @@
     const FLOOD_PAGE = "geoshieldFloodPage";
     const FIRE_PAGE = "geoshieldFirePage";
     const EARTHQUAKE_PAGE = "geoshieldEarthquakePage";
+    const AGRICULTURE_PAGE = "geoshieldAgriculturePage";
 
     let currentWorkspace = "map";
 
@@ -20,6 +21,7 @@
         const floodPage = document.getElementById(FLOOD_PAGE);
         const firePage = document.getElementById(FIRE_PAGE);
         const earthquakePage = document.getElementById(EARTHQUAKE_PAGE);
+        const agriculturePage = document.getElementById(AGRICULTURE_PAGE);
 
         if (!mapPage || !intelligencePage) {
             console.error("GeoShield: workspace pages not found.");
@@ -33,6 +35,7 @@
             mode === "flood" ? "flood" :
             mode === "fire" ? "fire" :
             mode === "earthquake" ? "earthquake" :
+            mode === "agriculture" ? "agriculture" :
             "map";
 
         const showMap = currentWorkspace === "map";
@@ -42,6 +45,7 @@
         const showFlood = currentWorkspace === "flood";
         const showFire = currentWorkspace === "fire";
         const showEarthquake = currentWorkspace === "earthquake";
+        const showAgriculture = currentWorkspace === "agriculture";
 
         mapPage.classList.toggle("workspace-page-active", showMap);
         intelligencePage.classList.toggle("workspace-page-active", showIntelligence);
@@ -66,6 +70,10 @@
             earthquakePage.classList.toggle("workspace-page-active", showEarthquake);
         }
 
+        if (agriculturePage) {
+            agriculturePage.classList.toggle("workspace-page-active", showAgriculture);
+        }
+
         document.body.classList.toggle("geoshield-map-mode", showMap);
         document.body.classList.toggle("geoshield-intelligence-mode", showIntelligence);
         document.body.classList.toggle("geoshield-livemap-mode", showLiveMap);
@@ -73,6 +81,7 @@
         document.body.classList.toggle("geoshield-flood-mode", showFlood);
         document.body.classList.toggle("geoshield-fire-mode", showFire);
         document.body.classList.toggle("geoshield-earthquake-mode", showEarthquake);
+        document.body.classList.toggle("geoshield-agriculture-mode", showAgriculture);
 
         updateNavigator();
 
@@ -115,6 +124,13 @@
             }
         }
 
+        if (showAgriculture) {
+            if (window.GeoShieldAgriculture) {
+                window.GeoShieldAgriculture.init();
+                window.GeoShieldAgriculture.refreshIfVisible();
+            }
+        }
+
         console.log("GeoShield workspace:", currentWorkspace.toUpperCase());
     }
 
@@ -141,6 +157,11 @@
 
     function goToEarthquake() {
         setWorkspace("earthquake");
+    }
+
+
+    function goToAgriculture() {
+        setWorkspace("agriculture");
     }
 
 
@@ -293,6 +314,16 @@
             earthquakeCloseBtn.addEventListener("click", goToMap);
         }
 
+        const agricultureLink = document.getElementById("navAgriculture");
+        if (agricultureLink) {
+            agricultureLink.addEventListener("click", goToAgriculture);
+        }
+
+        const agricultureCloseBtn = document.getElementById("agricultureCloseBtn");
+        if (agricultureCloseBtn) {
+            agricultureCloseBtn.addEventListener("click", goToMap);
+        }
+
         console.log("GeoShield Workspace Navigation READY");
     }
 
@@ -306,6 +337,7 @@
         goToFlood,
         goToFire,
         goToEarthquake,
+        goToAgriculture,
 
         getCurrentWorkspace: function () {
             return currentWorkspace;
@@ -320,3 +352,5 @@
     }
 
 })();
+
+

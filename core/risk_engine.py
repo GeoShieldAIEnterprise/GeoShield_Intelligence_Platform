@@ -112,3 +112,73 @@ class RiskEngine:
             "risk_score": score,
             "severity": severity,
         }
+    def calculate_agriculture_risk(self, record):
+
+        rainfall_mm = record.get("rainfall_mm")
+        temperature_c = record.get("temperature_c")
+        humidity_pct = record.get("humidity_pct")
+        ndvi = record.get("ndvi")
+
+        score = 0
+
+        # Rainfall
+        if rainfall_mm is None:
+            score += 10
+        elif rainfall_mm < 1:
+            score += 25
+        elif rainfall_mm < 5:
+            score += 18
+        elif rainfall_mm < 15:
+            score += 10
+        else:
+            score += 3
+
+        # Temperature
+        if temperature_c is None:
+            score += 8
+        elif temperature_c >= 35:
+            score += 25
+        elif temperature_c >= 30:
+            score += 17
+        elif temperature_c >= 25:
+            score += 8
+        else:
+            score += 3
+
+        # Humidity
+        if humidity_pct is None:
+            score += 8
+        elif humidity_pct < 30:
+            score += 25
+        elif humidity_pct < 50:
+            score += 17
+        elif humidity_pct < 70:
+            score += 8
+        else:
+            score += 3
+
+        # NDVI (vegetation health) -- low NDVI means sparse/stressed vegetation
+        if ndvi is None:
+            score += 10
+        elif ndvi < 0.15:
+            score += 25
+        elif ndvi < 0.25:
+            score += 17
+        elif ndvi < 0.35:
+            score += 8
+        else:
+            score += 3
+
+        if score >= 90:
+            severity = "Extreme"
+        elif score >= 70:
+            severity = "High"
+        elif score >= 50:
+            severity = "Moderate"
+        else:
+            severity = "Low"
+
+        return {
+            "risk_score": score,
+            "severity": severity,
+        }

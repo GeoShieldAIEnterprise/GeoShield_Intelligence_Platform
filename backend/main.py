@@ -14,6 +14,12 @@ from backend.api.sentinel2_map_layer import router as sentinel2_map_layer_router
 from backend.api.main_engine_api import router as main_engine_router
 from backend.api.earthquake_api import router as earthquake_router
 from backend.disaster.earthquake_engine import earthquake_engine
+from backend.api.agriculture_api import router as agriculture_router
+from backend.disaster.agriculture_engine import agriculture_engine
+from backend.api.fire_api import router as fire_router
+from backend.disaster.fire_engine import fire_engine
+import threading
+import time
 from core.engines.main_engine import main_engine
 from backend.routes.county import router as county_router
 
@@ -29,7 +35,27 @@ app.include_router(sentinel2_map_layer_router)
 app.include_router(main_engine_router)
 app.include_router(county_router)
 app.include_router(earthquake_router)
+app.include_router(agriculture_router)
+app.include_router(fire_router)
 main_engine.register_engine("earthquake", earthquake_engine)
+
+NDVI_WARMUP_INTERVAL_SECONDS = 170 * 60  # refresh just under the connector's 180-minute cache window
+
+def _ndvi_warmup_loop():
+    while True:
+        try:
+            print("[NDVI Warmup] Refreshing Sentinel-2 NDVI cache...")
+            result = main_engine.get_sentinel2_ndvi()
+            print(f"[NDVI Warmup] Done -- mode={result.get('mode')}, counties={len(result.get('counties', {}))}")
+        except Exception as exc:
+            print(f"[NDVI Warmup] Failed: {exc!r}")
+        time.sleep(NDVI_WARMUP_INTERVAL_SECONDS)
+
+@app.on_event("startup")
+def _start_ndvi_warmup():
+    threading.Thread(target=_ndvi_warmup_loop, daemon=True).start()
+main_engine.register_engine("agriculture", agriculture_engine)
+main_engine.register_engine("fire", fire_engine)
 
 @app.get("/api/latest-tile")
 def get_latest_tile(db: Session = Depends(get_db)):

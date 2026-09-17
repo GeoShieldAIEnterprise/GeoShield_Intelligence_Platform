@@ -14,23 +14,23 @@ class EventEnrichmentEngine:
             latitude
         )
 
-        road = self.spatial.nearest_road(
-            longitude,
-            latitude
-        )
-
         if county.empty:
             county_name = "Unknown"
         else:
             county_name = county["COUNTY"].iloc[0]
 
-        road_type = road["RTT_DESCRI"]
-        road_surface = road["MED_DESCRI"]
+        roads_layer = self.spatial.get_layer("roads")
 
-        if isinstance(road_type, float) and road_type != road_type:
-            road_type = None
-        if isinstance(road_surface, float) and road_surface != road_surface:
-            road_surface = None
+        if roads_layer is None or roads_layer.empty:
+            road_type = "Unavailable"
+            road_surface = "Unavailable"
+        else:
+            road = self.spatial.nearest_road(
+                longitude,
+                latitude
+            )
+            road_type = road["RTT_DESCRI"] if "RTT_DESCRI" in road else "Unknown"
+            road_surface = road["MED_DESCRI"] if "MED_DESCRI" in road else "Unknown"
 
         return {
 
