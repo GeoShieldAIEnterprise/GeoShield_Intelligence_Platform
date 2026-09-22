@@ -1,0 +1,164 @@
+﻿// ======================================================
+// GeoShield AI
+// Counties Module
+// ======================================================
+
+function loadCounties() {
+
+    Promise.all([
+        fetch("/static/data/kenya_counties.geojson").then(r => r.json()),
+        fetch("/api/drought/live").then(r => r.json())
+    ])
+
+        .then(([data, droughtList]) => {
+
+            const droughtLookup = {};
+            (droughtList || []).forEach(r => { droughtLookup[r.county] = r; });
+
+            const severityColor = (severity) => {
+                switch (severity) {
+                    case "Extreme": return "#e74c3c";
+                    case "High": return "#e67e22";
+                    case "Moderate": return "#f1c40f";
+                    default: return "#00b894";
+                }
+            };
+
+            L.geoJSON(data, {
+
+                style: function (feature) {
+
+                    const county =
+                        feature.properties.COUNTY ||
+                        feature.properties.NAME ||
+                        feature.properties.name ||
+                        "Unknown";
+
+                    const info = droughtLookup[county];
+                    const fill = info ? severityColor(info.severity) : "#475569";
+
+                    return {
+                        color: "#55ffff",
+                        weight: 1,
+                        fillColor: fill,
+                        fillOpacity: 0.30
+                    };
+
+                },
+
+                onEachFeature: function (feature, layer) {
+
+                    const county =
+
+                        feature.properties.COUNTY ||
+
+                        feature.properties.NAME ||
+
+                        feature.properties.name ||
+
+                        "Unknown";
+
+                    layer.on({
+
+                        mouseover: function (e) {
+
+                            e.target.setStyle({
+
+                                weight: 3,
+                                color: "#00ff88",
+                                fillOpacity: 0.45
+
+                            });
+
+                        },
+
+                        mouseout: function (e) {
+
+                            e.target.setStyle({
+
+                                weight: 1,
+                                color: "#55ffff",
+                                fillOpacity: 0.30
+
+                            });
+
+                        },
+
+                        click: function () {
+
+                            console.log("%c[COUNTY CLICK FIRED]", "background: red; color: white; font-size: 20px;", county);
+
+                            window.currentCounty = county;
+
+                            window.map.fitBounds(layer.getBounds(), {
+                                padding: [20, 20],
+                                maxZoom: 10
+                            });
+
+                            loadInfrastructure(county);
+
+                            fetch("/api/dashboard?county=" + encodeURIComponent(county))
+                                .then(response => response.json())
+                                .then(data => {
+                                    const overallEl = document.getElementById("aiScore");
+                                    if (!overallEl) return;
+                                    const overallRisk = data.overall_risk ?? "--";
+                                    const overallPercent = data.overall_risk_percent;
+                                    overallEl.innerText = (overallPercent != null) ? overallPercent + "%" : "--";
+                                    const overallColors = {
+                                        "Low": "#00b894", "Moderate": "#f1c40f",
+                                        "High": "#e67e22", "Extreme": "#e74c3c"
+                                    };
+                                    overallEl.style.color = overallColors[overallRisk] || "";
+                                })
+                                .catch(console.error);
+
+                            fetch("/county/" + encodeURIComponent(county))
+                                .then(response => response.json())
+                                .then(info => {
+
+                                    if (info.error) {
+                                        layer.bindPopup("<b>" + county + "</b><br>Live data unavailable.").openPopup();
+                                        return;
+                                    }
+
+                                    const ndviText = info.NDVI != null ? Number(info.NDVI).toFixed(2) : "--";
+                                    const rainfallText = info.Rainfall_mm != null ? Number(info.Rainfall_mm).toFixed(0) + " mm" : "--";
+                                    const tempText = info.Temperature_C != null ? Number(info.Temperature_C).toFixed(1) + " C" : "--";
+
+                                    const popupHtml =
+                                        "<b>" + info.County + "</b><hr>" +
+                                        "Rainfall: " + rainfallText + "<br>" +
+                                        "Temperature: " + tempText + "<br>" +
+                                        "NDVI: " + ndviText + "<br>" +
+                                        "Drought Risk: " + info.Drought_Risk + "<br>" +
+                                        "Flood Risk: " + info.Flood_Risk + "<br>" +
+                                        "Fire Risk: " + info.Fire_Risk;
+
+                                    layer.bindPopup(popupHtml).openPopup();
+
+                                    document.getElementById("weather").innerText = tempText;
+
+                                    document.getElementById("ndviCard").innerText = ndviText;
+                                    document.getElementById("rainfallCard").innerText = rainfallText;
+                                    document.getElementById("temperatureCard").innerText = tempText;
+                                    document.getElementById("floodRiskCard").innerText = info.Flood_Risk;
+                                    document.getElementById("fireRisk").innerText = info.Fire_Risk;
+                                    document.getElementById("fireRiskCard").innerText = info.Fire_Risk;
+                                    document.getElementById("populationCard").innerText = info.Population;
+
+                                })
+                                .catch(console.error);
+
+                        }
+                    });
+
+                }
+
+            }).addTo(map);
+
+        })
+
+        .catch(console.error);
+
+}
