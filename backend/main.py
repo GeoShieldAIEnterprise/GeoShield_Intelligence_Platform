@@ -16,12 +16,21 @@ from backend.api.earthquake_api import router as earthquake_router
 from backend.disaster.earthquake_engine import earthquake_engine
 from backend.api.agriculture_api import router as agriculture_router
 from backend.disaster.agriculture_engine import agriculture_engine
+from backend.api.drought_api import router as drought_router
+from backend.disaster.drought_engine import drought_engine
+from backend.api.flood_api import router as flood_router
+from backend.disaster.flood_engine import flood_engine
 from backend.api.fire_api import router as fire_router
 from backend.disaster.fire_engine import fire_engine
+from backend.analytics.analytics_engine import analytics_engine
+from backend.api.analytics_api import router as analytics_router
 import threading
 import time
 from core.engines.main_engine import main_engine
 from backend.routes.county import router as county_router
+from engines.alerts.alert_engine import start_alert_orchestrator
+from backend.routes.alerts import router as alerts_router
+from backend.routes.reports import router as reports_router
 
 app = FastAPI(title="GeoShield AI Enterprise", version="1.3.1")
 
@@ -36,7 +45,12 @@ app.include_router(main_engine_router)
 app.include_router(county_router)
 app.include_router(earthquake_router)
 app.include_router(agriculture_router)
+app.include_router(drought_router)
+app.include_router(flood_router)
 app.include_router(fire_router)
+app.include_router(analytics_router)
+app.include_router(alerts_router, prefix="/api")
+app.include_router(reports_router, prefix="/api")
 main_engine.register_engine("earthquake", earthquake_engine)
 
 NDVI_WARMUP_INTERVAL_SECONDS = 170 * 60  # refresh just under the connector's 180-minute cache window
@@ -55,7 +69,50 @@ def _ndvi_warmup_loop():
 def _start_ndvi_warmup():
     threading.Thread(target=_ndvi_warmup_loop, daemon=True).start()
 main_engine.register_engine("agriculture", agriculture_engine)
+main_engine.register_engine("drought", drought_engine)
+main_engine.register_engine("flood", flood_engine)
 main_engine.register_engine("fire", fire_engine)
+
+ANALYTICS_SNAPSHOT_INTERVAL_SECONDS = 5 * 60
+
+def _analytics_snapshot_loop():
+    while True:
+        try:
+            analytics_engine.run_snapshot_cycle()
+        except Exception as exc:
+            print(f"[Analytics Snapshot] Failed: {exc!r}")
+        time.sleep(ANALYTICS_SNAPSHOT_INTERVAL_SECONDS)
+
+@app.on_event("startup")
+def _start_analytics_snapshot():
+    threading.Thread(target=_analytics_snapshot_loop, daemon=True).start()
+
+HAZARD_WARMUP_INTERVAL_SECONDS = 4 * 60  # refresh just under each engine's 5-minute cache window
+
+def _hazard_cache_warmup_loop():
+    while True:
+        for name, engine in (
+            ("agriculture", agriculture_engine),
+            ("drought", drought_engine),
+            ("flood", flood_engine),
+            ("fire", fire_engine),
+        ):
+            try:
+                records = engine.analyse()
+                print(f"[Hazard Warmup] {name}: refreshed, {len(records)} records")
+            except Exception as exc:
+                print(f"[Hazard Warmup] {name} failed: {exc!r}")
+        time.sleep(HAZARD_WARMUP_INTERVAL_SECONDS)
+
+@app.on_event("startup")
+def _start_hazard_cache_warmup():
+    threading.Thread(target=_hazard_cache_warmup_loop, daemon=True).start()
+
+
+@app.on_event("startup")
+def _start_alert_orchestrator():
+    start_alert_orchestrator()
+
 
 @app.get("/api/latest-tile")
 def get_latest_tile(db: Session = Depends(get_db)):
@@ -85,7 +142,8 @@ def search_sentinel2(bbox: str = None, cloud_cover: int = 30, limit: int = 20):
 
 @app.get("/resources/{county_name}")
 def get_county_resources(county_name: str):
-    db_path = _Path("database/geoshield.db")
+    from core.config import settings as _settings
+    db_path = _Path(_settings.data_dir) / "geoshield.db"
     if not db_path.exists():
         return []
 
@@ -102,9 +160,6 @@ def get_county_resources(county_name: str):
 
     return [dict(row) for row in rows]
 
-@app.get("/alerts")
-def get_alerts():
-    return [{"id": 1, "message": "No critical anomalies detected in Nairobi region", "severity": "info"}]
 
 @app.get("/health")
 def health_check():

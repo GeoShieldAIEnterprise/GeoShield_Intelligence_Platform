@@ -19,10 +19,12 @@ from __future__ import annotations
 import json
 import subprocess
 import tempfile
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+import logging
 
 import geopandas as gpd
 
@@ -37,12 +39,20 @@ from ..base_connector import BaseConnector
 from ..connector_config import ConnectorConfig
 from ..connector_result import ConnectorResult
 
+logger = logging.getLogger(__name__)
+
 STATISTICS_URL = "https://sh.dataspace.copernicus.eu/api/v1/statistics"
 COUNTIES_GEOJSON = Path("frontend/static/data/kenya_counties.geojson")
 CACHE_MINUTES = 180
 LOOKBACK_DAYS = 14
 MAX_CLOUD_COVERAGE = 50
 NDVI_RESOLUTION_DEG = 0.01  # ~1.1km at Kenyan latitude; EPSG:4326 bounds require degrees, not meters
+
+_search_lock = threading.Lock()
+
+MAX_RETRIES_ON_RATE_LIMIT = 3
+RETRY_BACKOFF_SECONDS = 5
+REQUEST_DELAY_SECONDS = 0.8
 
 NDVI_EVALSCRIPT = """//VERSION=3
 function setup() {
@@ -105,6 +115,12 @@ class Sentinel2NDVIConnector(BaseConnector):
         self._auth = CopernicusAuthManager()
         self._cache: dict[str, Any] | None = None
         self._cache_time: float = 0.0
+        # Stale-while-revalidate: NDVI changes slowly, so a county that fails
+        # to fetch this cycle should keep showing its last successful reading
+        # rather than going blank. These never expire on their own -- only a
+        # fresh successful fetch overwrites them.
+        self._last_good: dict[str, float] = {}
+        self._last_good_time: dict[str, float] = {}
 
     @property
     def provider_name(self) -> str:
@@ -163,6 +179,8 @@ class Sentinel2NDVIConnector(BaseConnector):
         ok, text = _curl_post_json(STATISTICS_URL, token, payload, min(settings.http_timeout, 45))
 
         if not ok:
+            import logging
+            logging.getLogger(__name__).warning("NDVI curl failed: %s", text[:300])
             return None
 
         try:
@@ -184,62 +202,133 @@ class Sentinel2NDVIConnector(BaseConnector):
                 if sample_count and mean is not None:
                     return round(float(mean), 4)
 
+            import logging
+            logging.getLogger(__name__).warning(
+                "NDVI no valid interval found. Raw response body: %s", text[:500]
+            )
             return None
 
-        except (ValueError, KeyError, TypeError):
+        except (ValueError, KeyError, TypeError) as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "NDVI parse failed (%s). Raw response body: %s", exc, text[:500]
+            )
             return None
 
     def search(self, **filters: Any) -> ConnectorResult:
-        now = time.time()
+        with _search_lock:
+            now = time.time()
 
-        if self._cache is not None and (now - self._cache_time) < (CACHE_MINUTES * 60):
+            if self._cache is not None and (now - self._cache_time) < (CACHE_MINUTES * 60):
+                return ConnectorResult.ok(
+                    provider=self.provider_name,
+                    operation="search",
+                    data=self._cache,
+                    metadata={"cached": True, "cache_age_seconds": round(now - self._cache_time)},
+                )
+
+            try:
+                token = self._auth.get_token()
+
+            except (CopernicusAuthenticationError, CopernicusConfigurationError, CopernicusNetworkError) as exc:
+                if self._last_good:
+                    logger.warning(
+                        "Sentinel2-NDVI auth failed (%s); serving last-known-good NDVI for all counties.", exc
+                    )
+                    return ConnectorResult.ok(
+                        provider=self.provider_name,
+                        operation="search",
+                        data=dict(self._last_good),
+                        metadata={
+                            "cached": True,
+                            "stale_fallback": True,
+                            "stale_counties": sorted(self._last_good.keys()),
+                            "reason": str(exc),
+                        },
+                    )
+                return ConnectorResult.failure(
+                    provider=self.provider_name,
+                    operation="search",
+                    error=str(exc),
+                )
+
+            date_to = datetime.now(timezone.utc)
+            date_from = date_to - timedelta(days=LOOKBACK_DAYS)
+            date_to_str = date_to.strftime("%Y-%m-%dT%H:%M:%SZ")
+            date_from_str = date_from.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+            try:
+                counties = self._county_geometries()
+
+            except Exception as exc:
+                if self._last_good:
+                    logger.warning(
+                        "Failed to load county boundaries (%s); serving last-known-good NDVI.", exc
+                    )
+                    return ConnectorResult.ok(
+                        provider=self.provider_name,
+                        operation="search",
+                        data=dict(self._last_good),
+                        metadata={
+                            "cached": True,
+                            "stale_fallback": True,
+                            "stale_counties": sorted(self._last_good.keys()),
+                            "reason": str(exc),
+                        },
+                    )
+                return ConnectorResult.failure(
+                    provider=self.provider_name,
+                    operation="search",
+                    error=f"Failed to load county boundaries: {exc}",
+                )
+
+            results: dict[str, float | None] = {}
+            stale_counties: list[str] = []
+
+            for name, geometry in counties:
+                fresh = None
+                for attempt in range(MAX_RETRIES_ON_RATE_LIMIT + 1):
+                    fresh = self._query_county_ndvi(token, geometry, date_from_str, date_to_str)
+                    if fresh is not None:
+                        break
+                    if attempt < MAX_RETRIES_ON_RATE_LIMIT:
+                        logger.warning(
+                            "NDVI fetch for %s failed (attempt %d/%d) -- backing off %ds before retry.",
+                            name, attempt + 1, MAX_RETRIES_ON_RATE_LIMIT, RETRY_BACKOFF_SECONDS,
+                        )
+                        time.sleep(RETRY_BACKOFF_SECONDS)
+
+                time.sleep(REQUEST_DELAY_SECONDS)
+
+                if fresh is not None:
+                    results[name] = fresh
+                    self._last_good[name] = fresh
+                    self._last_good_time[name] = now
+                elif name in self._last_good:
+                    results[name] = self._last_good[name]
+                    stale_counties.append(name)
+                    age_min = (now - self._last_good_time.get(name, now)) / 60
+                    logger.warning(
+                        "NDVI fetch failed for %s this cycle; serving last-known-good value from %.0f min ago.",
+                        name, age_min,
+                    )
+                else:
+                    results[name] = None
+                    logger.warning("NDVI fetch failed for %s and no prior value exists; returning null.", name)
+
+            self._cache = results
+            self._cache_time = now
+
             return ConnectorResult.ok(
                 provider=self.provider_name,
                 operation="search",
-                data=self._cache,
-                metadata={"cached": True, "cache_age_seconds": round(now - self._cache_time)},
+                data=results,
+                metadata={
+                    "cached": False,
+                    "lookback_days": LOOKBACK_DAYS,
+                    "stale_counties": stale_counties,
+                },
             )
-
-        try:
-            token = self._auth.get_token()
-
-        except (CopernicusAuthenticationError, CopernicusConfigurationError, CopernicusNetworkError) as exc:
-            return ConnectorResult.failure(
-                provider=self.provider_name,
-                operation="search",
-                error=str(exc),
-            )
-
-        date_to = datetime.now(timezone.utc)
-        date_from = date_to - timedelta(days=LOOKBACK_DAYS)
-        date_to_str = date_to.strftime("%Y-%m-%dT%H:%M:%SZ")
-        date_from_str = date_from.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-        try:
-            counties = self._county_geometries()
-
-        except Exception as exc:
-            return ConnectorResult.failure(
-                provider=self.provider_name,
-                operation="search",
-                error=f"Failed to load county boundaries: {exc}",
-            )
-
-        results: dict[str, float | None] = {}
-
-        for name, geometry in counties:
-            ndvi = self._query_county_ndvi(token, geometry, date_from_str, date_to_str)
-            results[name] = ndvi
-
-        self._cache = results
-        self._cache_time = now
-
-        return ConnectorResult.ok(
-            provider=self.provider_name,
-            operation="search",
-            data=results,
-            metadata={"cached": False, "lookback_days": LOOKBACK_DAYS},
-        )
 
     def download(self, product_id: str) -> ConnectorResult:
         return ConnectorResult.failure(

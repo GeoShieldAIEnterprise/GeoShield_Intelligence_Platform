@@ -79,54 +79,62 @@ window.GeoShieldDrought = {
 
     async loadCountyDroughtLayer() {
         try {
-            const [geoRes, countiesRes, gpmRes, era5Res] = await Promise.all([
+            const [geoRes, liveRes] = await Promise.all([
                 fetch("/static/data/kenya_counties.geojson"),
-                fetch("/counties"),
-                fetch("/api/main-engine/gpm-rainfall"),
-                fetch("/api/main-engine/era5-weather")
+                fetch("/api/drought/live")
             ]);
             const data = await geoRes.json();
-            const countiesList = await countiesRes.json();
-            const gpmData = await gpmRes.json();
-            const gpmCounties = gpmData.counties || {};
-            const era5Data = await era5Res.json();
-            const era5Counties = era5Data.counties || {};
+            const liveList = await liveRes.json();
 
             const countyLookup = {};
-            countiesList.forEach(c => { countyLookup[c.County] = c; });
+            liveList.forEach(r => { countyLookup[r.county] = r; });
             this.countyLookup = countyLookup;
+
+            const severityColor = (severity) => {
+                switch (severity) {
+                    case "Extreme": return "#e74c3c";
+                    case "High": return "#e67e22";
+                    case "Moderate": return "#f1c40f";
+                    default: return "#00b894";
+                }
+            };
 
             this.countyLayer = L.geoJSON(data, {
                 style: (feature) => {
                     const county = feature.properties.COUNTY || feature.properties.NAME || feature.properties.name || "Unknown";
                     const info = countyLookup[county];
-                    const risk = info ? Number(info.Drought_Risk || 0) : 0;
-                    let fill = "#00b894";
-                    if (risk >= 30) fill = "#f1c40f";
-                    if (risk >= 50) fill = "#e67e22";
-                    if (risk >= 70) fill = "#e74c3c";
+                    const fill = info ? severityColor(info.severity) : "#475569";
                     return { color: "#55ffff", weight: 1, fillColor: fill, fillOpacity: 0.4 };
                 },
                 onEachFeature: (feature, layer) => {
                     const county = feature.properties.COUNTY || feature.properties.NAME || feature.properties.name || "Unknown";
 
                     layer.on({
-                        mouseover: (e) => e.target.setStyle({ weight: 3, color: "#00ff88", fillOpacity: 0.55 }),
+                        mouseover: (e) => e.target.setStyle({ weight: 3, color: "#00ff88", fillOpacity:0.55 }),
                         mouseout: (e) => this.countyLayer.resetStyle(e.target),
                         click: () => {
                             const info = countyLookup[county];
-                            if (!info) return;
+                            if (!info) {
+                                layer.bindPopup("<b>" + county + "</b><br>Live drought data unavailable.").openPopup();
+                                return;
+                            }
 
-                            layer.bindPopup(`
-                                <b>${info.County}</b>
-                                <hr>
-                                \ud83c\udf27\ufe0f Rainfall (GPM ref.): ${Number(info.Rainfall_mm).toFixed(0)} mm<br>
-                                \ud83c\udf21\ufe0f Temperature (ERA5 ref.): ${Number(info.Temperature_C).toFixed(1)} \u00b0C<br>
-                                \ud83c\udf3f NDVI: ${Number(info.NDVI).toFixed(2)}<br>
-                                \ud83d\udea8 Drought Risk: ${Number(info.Drought_Risk).toFixed(1)}%<br>
-                                \ud83c\udf27\ufe0f Today's rainfall (GPM live): ${gpmCounties[county] !== undefined ? gpmCounties[county] + " mm" : "unavailable"}<br>
-                                \ud83c\udf21\ufe0f Temperature (ERA5 live): ${era5Counties[county] !== undefined ? era5Counties[county].temperature_c + " \u00b0C" : "unavailable"}
-                            `).openPopup();
+                            const ndvi = info.ndvi != null ? Number(info.ndvi).toFixed(3) : "--";
+                            const actions = Array.isArray(info.recommended_actions)
+                                ? info.recommended_actions.map(a => "<li>" + a + "</li>").join("")
+                                : "";
+
+                            const popupHtml =
+                                "<div style=\"min-width:230px;\">" +
+                                "<b>" + county + "</b><hr>" +
+                                "Rainfall (GPM live): " + (info.rainfall_mm != null ? Number(info.rainfall_mm).toFixed(1) + " mm" : "--") + "<br>" +
+                                "Temperature (ERA5 live): " + (info.temperature_c != null ? Number(info.temperature_c).toFixed(1) + " C" : "--") + "<br>" +
+                                "NDVI (Sentinel-2 live): " + ndvi + "<br>" +
+                                "Drought Risk: <b style=\"color:" + severityColor(info.severity) + "\">" + info.severity + "</b> (" + info.risk_score + "/100)" +
+                                "<div style=\"margin-top:6px;\"><b>Recommended actions:</b><ul style=\"margin:4px 0 0 16px;padding:0;\">" + actions + "</ul></div>" +
+                                "</div>";
+
+                            layer.bindPopup(popupHtml).openPopup();
 
                             this.map.fitBounds(layer.getBounds(), { padding: [20, 20], maxZoom: 9 });
                         }
@@ -179,11 +187,13 @@ window.GeoShieldDrought = {
 
     async loadSummary() {
         try {
-            const res = await fetch("/summary");
-            const data = await res.json();
+            const res = await fetch("/api/drought/live");
+            const records = await res.json();
             const el = document.getElementById("droughtHighestRiskCounty");
-            if (el && data.highest_drought) {
-                el.innerText = `${data.highest_drought.County} (${Number(data.highest_drought.Drought_Risk).toFixed(1)}%)`;
+            if (el && records.length) {
+                const rank = { "Low": 0, "Moderate": 1, "High": 2, "Extreme": 3 };
+                const highest = [...records].sort((a, b) => (rank[b.severity] ?? 0) - (rank[a.severity] ?? 0))[0];
+                el.innerText = highest.county + " (" + highest.severity + " - " + highest.risk_score + "/100)";
             }
         } catch (error) {
             console.error("[Drought] summary failed:", error);

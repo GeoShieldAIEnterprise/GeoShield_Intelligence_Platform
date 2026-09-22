@@ -1,0 +1,378 @@
+{
+  "Turkana": {
+    "has_major_river": true,
+    "representative_lat": 4.9787,
+    "representative_lon": 34.8483,
+    "upland_skm": 24132.5,
+    "reference_discharge_cms": 25.91,
+    "stream_order": 6
+  },
+  "Marsabit": {
+    "has_major_river": true,
+    "representative_lat": 3.375,
+    "representative_lon": 36.1417,
+    "upland_skm": 101061.3,
+    "reference_discharge_cms": 962.56,
+    "stream_order": 6
+  },
+  "Mandera": {
+    "has_major_river": true,
+    "representative_lat": 3.9761,
+    "representative_lon": 41.8983,
+    "upland_skm": 60089.3,
+    "reference_discharge_cms": 143.05,
+    "stream_order": 6
+  },
+  "Wajir": {
+    "has_major_river": true,
+    "representative_lat": 0.4523,
+    "representative_lon": 40.9714,
+    "upland_skm": 81528.0,
+    "reference_discharge_cms": 72.91,
+    "stream_order": 6
+  },
+  "West Pokot": {
+    "has_major_river": true,
+    "representative_lat": 1.9117,
+    "representative_lon": 35.344,
+    "upland_skm": 5963.5,
+    "reference_discharge_cms": 27.75,
+    "stream_order": 5
+  },
+  "Samburu": {
+    "has_major_river": true,
+    "representative_lat": 0.7812,
+    "representative_lon": 38.0773,
+    "upland_skm": 18012.3,
+    "reference_discharge_cms": 58.18,
+    "stream_order": 5
+  },
+  "Isiolo": {
+    "has_major_river": true,
+    "representative_lat": 1.0025,
+    "representative_lon": 39.4554,
+    "upland_skm": 61472.9,
+    "reference_discharge_cms": 110.15,
+    "stream_order": 6
+  },
+  "Baringo": {
+    "has_major_river": true,
+    "representative_lat": 1.6457,
+    "representative_lon": 35.782,
+    "upland_skm": 5448.7,
+    "reference_discharge_cms": 44.25,
+    "stream_order": 4
+  },
+  "Keiyo-Marakwet": {
+    "has_major_river": true,
+    "representative_lat": 1.2715,
+    "representative_lon": 35.7019,
+    "upland_skm": 4158.8,
+    "reference_discharge_cms": 35.53,
+    "stream_order": 4
+  },
+  "Trans Nzoia": {
+    "has_major_river": true,
+    "representative_lat": 0.8989,
+    "representative_lon": 35.039,
+    "upland_skm": 3125.3,
+    "reference_discharge_cms": 28.75,
+    "stream_order": 4
+  },
+  "Bungoma": {
+    "has_major_river": true,
+    "representative_lat": 0.4213,
+    "representative_lon": 34.5896,
+    "upland_skm": 9774.6,
+    "reference_discharge_cms": 115.95,
+    "stream_order": 5
+  },
+  "Garissa": {
+    "has_major_river": true,
+    "representative_lat": 0.4411,
+    "representative_lon": 40.9549,
+    "upland_skm": 81528.0,
+    "reference_discharge_cms": 72.91,
+    "stream_order": 6
+  },
+  "Uasin Gishu": {
+    "has_major_river": true,
+    "representative_lat": 0.8902,
+    "representative_lon": 35.1146,
+    "upland_skm": 3010.7,
+    "reference_discharge_cms": 27.24,
+    "stream_order": 4
+  },
+  "Kakamega": {
+    "has_major_river": true,
+    "representative_lat": 0.2753,
+    "representative_lon": 34.3919,
+    "upland_skm": 11491.6,
+    "reference_discharge_cms": 142.08,
+    "stream_order": 5
+  },
+  "Laikipia": {
+    "has_major_river": true,
+    "representative_lat": 0.7412,
+    "representative_lon": 36.9312,
+    "upland_skm": 8299.0,
+    "reference_discharge_cms": 37.97,
+    "stream_order": 5
+  },
+  "Busia": {
+    "has_major_river": true,
+    "representative_lat": 0.0744,
+    "representative_lon": 33.9699,
+    "upland_skm": 15901.1,
+    "reference_discharge_cms": 196.57,
+    "stream_order": 5
+  },
+  "Meru": {
+    "has_major_river": true,
+    "representative_lat": -0.0854,
+    "representative_lon": 38.3812,
+    "upland_skm": 20346.1,
+    "reference_discharge_cms": 201.19,
+    "stream_order": 5
+  },
+  "Nandi": {
+    "has_major_river": true,
+    "representative_lat": 0.1812,
+    "representative_lon": 34.9294,
+    "upland_skm": 1476.6,
+    "reference_discharge_cms": 16.05,
+    "stream_order": 4
+  },
+  "Siaya": {
+    "has_major_river": true,
+    "representative_lat": -0.2771,
+    "representative_lon": 33.959,
+    "upland_skm": 14809.6,
+    "reference_discharge_cms": 159.29,
+    "stream_order": 5
+  },
+  "Nakuru": {
+    "has_major_river": true,
+    "representative_lat": -0.7613,
+    "representative_lon": 36.3558,
+    "upland_skm": 2465.7,
+    "reference_discharge_cms": 9.57,
+    "stream_order": 4
+  },
+  "Vihiga": {
+    "has_major_river": true,
+    "representative_lat": 0.1839,
+    "representative_lon": 34.818,
+    "upland_skm": 1654.6,
+    "reference_discharge_cms": 18.78,
+    "stream_order": 4
+  },
+  "Nyandarua": {
+    "has_major_river": true,
+    "representative_lat": -0.5681,
+    "representative_lon": 36.4071,
+    "upland_skm": 1620.6,
+    "reference_discharge_cms": 11.91,
+    "stream_order": 4
+  },
+  "Tharaka": {
+    "has_major_river": true,
+    "representative_lat": -0.0834,
+    "representative_lon": 38.2874,
+    "upland_skm": 19496.7,
+    "reference_discharge_cms": 196.54,
+    "stream_order": 5
+  },
+  "Kericho": {
+    "has_major_river": true,
+    "representative_lat": -0.442,
+    "representative_lon": 35.036,
+    "upland_skm": 3261.3,
+    "reference_discharge_cms": 35.36,
+    "stream_order": 4
+  },
+  "Kisumu": {
+    "has_major_river": true,
+    "representative_lat": -0.2854,
+    "representative_lon": 34.48,
+    "upland_skm": 10132.5,
+    "reference_discharge_cms": 126.97,
+    "stream_order": 5
+  },
+  "Nyeri": {
+    "has_major_river": true,
+    "representative_lat": -0.5695,
+    "representative_lon": 37.1486,
+    "upland_skm": 2273.8,
+    "reference_discharge_cms": 26.06,
+    "stream_order": 4
+  },
+  "Tana River": {
+    "has_major_river": true,
+    "representative_lat": -2.5193,
+    "representative_lon": 40.511,
+    "upland_skm": 95242.8,
+    "reference_discharge_cms": 242.08,
+    "stream_order": 6
+  },
+  "Kitui": {
+    "has_major_river": true,
+    "representative_lat": -3.0372,
+    "representative_lon": 39.0576,
+    "upland_skm": 33442.0,
+    "reference_discharge_cms": 89.52,
+    "stream_order": 6
+  },
+  "Kirinyaga": {
+    "has_major_river": true,
+    "representative_lat": -0.7808,
+    "representative_lon": 37.2652,
+    "upland_skm": 3997.2,
+    "reference_discharge_cms": 45.77,
+    "stream_order": 5
+  },
+  "Embu": {
+    "has_major_river": true,
+    "representative_lat": -0.5476,
+    "representative_lon": 37.8855,
+    "upland_skm": 12545.5,
+    "reference_discharge_cms": 112.6,
+    "stream_order": 5
+  },
+  "Homa Bay": {
+    "has_major_river": true,
+    "representative_lat": -0.3427,
+    "representative_lon": 34.226,
+    "upland_skm": 12734.1,
+    "reference_discharge_cms": 145.84,
+    "stream_order": 5
+  },
+  "Bomet": {
+    "has_major_river": true,
+    "representative_lat": -0.4979,
+    "representative_lon": 35.0541,
+    "upland_skm": 3155.5,
+    "reference_discharge_cms": 33.04,
+    "stream_order": 4
+  },
+  "Nyamira": {
+    "has_major_river": true,
+    "representative_lat": -0.4515,
+    "representative_lon": 35.0388,
+    "upland_skm": 3261.3,
+    "reference_discharge_cms": 35.36,
+    "stream_order": 4
+  },
+  "Narok": {
+    "has_major_river": true,
+    "representative_lat": -1.5473,
+    "representative_lon": 35.0201,
+    "upland_skm": 6521.7,
+    "reference_discharge_cms": 24.5,
+    "stream_order": 5
+  },
+  "Kisii": {
+    "has_major_river": true,
+    "representative_lat": -0.8453,
+    "representative_lon": 34.6311,
+    "upland_skm": 1045.3,
+    "reference_discharge_cms": 10.19,
+    "stream_order": 4
+  },
+  "Murang'a": {
+    "has_major_river": true,
+    "representative_lat": -0.7546,
+    "representative_lon": 37.262,
+    "upland_skm": 3510.6,
+    "reference_discharge_cms": 40.02,
+    "stream_order": 5
+  },
+  "Migori": {
+    "has_major_river": true,
+    "representative_lat": -0.8085,
+    "representative_lon": 33.9543,
+    "upland_skm": 7471.8,
+    "reference_discharge_cms": 64.09,
+    "stream_order": 5
+  },
+  "Kiambu": {
+    "has_major_river": true,
+    "representative_lat": -1.081,
+    "representative_lon": 37.2873,
+    "upland_skm": 5788.5,
+    "reference_discharge_cms": 16.24,
+    "stream_order": 5
+  },
+  "Machakos": {
+    "has_major_river": true,
+    "representative_lat": -0.8116,
+    "representative_lon": 37.8405,
+    "upland_skm": 9926.3,
+    "reference_discharge_cms": 97.08,
+    "stream_order": 5
+  },
+  "Kajiado": {
+    "has_major_river": true,
+    "representative_lat": -2.1144,
+    "representative_lon": 36.0263,
+    "upland_skm": 8626.4,
+    "reference_discharge_cms": 22.44,
+    "stream_order": 5
+  },
+  "Nairobi": {
+    "has_major_river": true,
+    "representative_lat": -1.2675,
+    "representative_lon": 37.1012,
+    "upland_skm": 3002.8,
+    "reference_discharge_cms": 5.67,
+    "stream_order": 4
+  },
+  "Makueni": {
+    "has_major_river": true,
+    "representative_lat": -2.9545,
+    "representative_lon": 38.4965,
+    "upland_skm": 24347.3,
+    "reference_discharge_cms": 65.13,
+    "stream_order": 6
+  },
+  "Lamu": {
+    "has_major_river": true,
+    "representative_lat": -1.9338,
+    "representative_lon": 40.7678,
+    "upland_skm": 9165.9,
+    "reference_discharge_cms": 8.0,
+    "stream_order": 5
+  },
+  "Kilifi": {
+    "has_major_river": true,
+    "representative_lat": -3.1521,
+    "representative_lon": 40.1271,
+    "upland_skm": 38435.5,
+    "reference_discharge_cms": 89.87,
+    "stream_order": 6
+  },
+  "Taita Taveta": {
+    "has_major_river": true,
+    "representative_lat": -3.0687,
+    "representative_lon": 39.2104,
+    "upland_skm": 33924.5,
+    "reference_discharge_cms": 88.28,
+    "stream_order": 6
+  },
+  "Kwale": {
+    "has_major_river": true,
+    "representative_lat": -4.6652,
+    "representative_lon": 39.2152,
+    "upland_skm": 6703.6,
+    "reference_discharge_cms": 18.05,
+    "stream_order": 5
+  },
+  "Mombasa": {
+    "has_major_river": true,
+    "representative_lat": -4.0361,
+    "representative_lon": 39.6742,
+    "upland_skm": 689.6,
+    "reference_discharge_cms": 2.86,
+    "stream_order": 3
+  }
+}

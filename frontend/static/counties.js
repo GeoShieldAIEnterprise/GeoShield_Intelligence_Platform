@@ -1,35 +1,47 @@
-// ======================================================
+﻿// ======================================================
 // GeoShield AI
 // Counties Module
 // ======================================================
 
 function loadCounties() {
 
-    fetch("/static/data/kenya_counties.geojson")
+    Promise.all([
+        fetch("/static/data/kenya_counties.geojson").then(r => r.json()),
+        fetch("/api/drought/live").then(r => r.json())
+    ])
 
-        .then(response => response.json())
+        .then(([data, droughtList]) => {
 
-        .then(data => {
+            const droughtLookup = {};
+            (droughtList || []).forEach(r => { droughtLookup[r.county] = r; });
+
+            const severityColor = (severity) => {
+                switch (severity) {
+                    case "Extreme": return "#e74c3c";
+                    case "High": return "#e67e22";
+                    case "Moderate": return "#f1c40f";
+                    default: return "#00b894";
+                }
+            };
 
             L.geoJSON(data, {
 
                 style: function (feature) {
 
-                    const risk = Number(feature.properties.Drought_Risk || 0);
+                    const county =
+                        feature.properties.COUNTY ||
+                        feature.properties.NAME ||
+                        feature.properties.name ||
+                        "Unknown";
 
-                    let fill = "#00b894";
-
-                    if (risk >= 30) fill = "#f1c40f";
-                    if (risk >= 50) fill = "#e67e22";
-                    if (risk >= 70) fill = "#e74c3c";
+                    const info = droughtLookup[county];
+                    const fill = info ? severityColor(info.severity) : "#475569";
 
                     return {
-
                         color: "#55ffff",
                         weight: 1,
                         fillColor: fill,
                         fillOpacity: 0.30
-
                     };
 
                 },
@@ -74,89 +86,72 @@ function loadCounties() {
 
                         click: function () {
 
-                            // Save current county globally
+                            console.log("%c[COUNTY CLICK FIRED]", "background: red; color: white; font-size: 20px;", county);
 
                             window.currentCounty = county;
 
-                            // Zoom to county
-
                             window.map.fitBounds(layer.getBounds(), {
-
                                 padding: [20, 20],
                                 maxZoom: 10
-
                             });
-
-                            // Load nearby infrastructure
 
                             loadInfrastructure(county);
 
-                            // Load county statistics
+                            fetch("/api/dashboard?county=" + encodeURIComponent(county))
+                                .then(response => response.json())
+                                .then(data => {
+                                    console.log("%c[DASHBOARD DATA RECEIVED]", "background: blue; color: white; font-size: 16px;", data);
+                                    const overallEl = document.getElementById("aiScore");
+                                    if (!overallEl) { console.error("[aiScore element NOT FOUND]"); return; }
+                                    const overallRisk = data.overall_risk ?? "--";
+                                    const overallPercent = data.overall_risk_percent;
+                                    overallEl.innerText = (overallPercent != null) ? overallPercent + "%" : "--";
+                                    const overallColors = {
+                                        "Low": "#00b894", "Moderate": "#f1c40f",
+                                        "High": "#e67e22", "Extreme": "#e74c3c"
+                                    };
+                                    overallEl.style.color = overallColors[overallRisk] || "";
+                                })
+                                .catch(console.error);
 
                             fetch("/county/" + encodeURIComponent(county))
-
                                 .then(response => response.json())
-
                                 .then(info => {
 
-                                    layer.bindPopup(`
+                                    if (info.error) {
+                                        layer.bindPopup("<b>" + county + "</b><br>Live data unavailable.").openPopup();
+                                        return;
+                                    }
 
-<b>${info.County}</b>
+                                    const ndviText = info.NDVI != null ? Number(info.NDVI).toFixed(2) : "--";
+                                    const rainfallText = info.Rainfall_mm != null ? Number(info.Rainfall_mm).toFixed(0) + " mm" : "--";
+                                    const tempText = info.Temperature_C != null ? Number(info.Temperature_C).toFixed(1) + " C" : "--";
 
-<hr>
+                                    const popupHtml =
+                                        "<b>" + info.County + "</b><hr>" +
+                                        "Rainfall: " + rainfallText + "<br>" +
+                                        "Temperature: " + tempText + "<br>" +
+                                        "NDVI: " + ndviText + "<br>" +
+                                        "Drought Risk: " + info.Drought_Risk + "<br>" +
+                                        "Flood Risk: " + info.Flood_Risk + "<br>" +
+                                        "Fire Risk: " + info.Fire_Risk;
 
-🌧️ Rainfall: ${Number(info.Rainfall_mm).toFixed(0)} mm<br>
+                                    layer.bindPopup(popupHtml).openPopup();
 
-🌡️ Temperature: ${Number(info.Temperature_C).toFixed(1)} °C<br>
+                                    document.getElementById("weather").innerText = tempText;
 
-🌿 NDVI: ${Number(info.NDVI).toFixed(2)}<br>
-
-🚨 Drought Risk: ${Number(info.Drought_Risk).toFixed(1)}%
-
-`).openPopup();
-
-                                    // -----------------------
-                                    // Right Panel
-                                    // -----------------------
-
-                                    document.getElementById("weather").innerText =
-                                        Number(info.Temperature_C).toFixed(1) + "°C";
-
-                                    // -----------------------
-                                    // Bottom Dashboard
-                                    // -----------------------
-
-                                    document.getElementById("ndviCard").innerText =
-                                       formatNumber(info.NDVI)
-
-                                    document.getElementById("rainfallCard").innerText =
-                                        Number(info.Rainfall_mm).toFixed(0) + " mm";
-
-                                    document.getElementById("temperatureCard").innerText =
-                                        formatNumber(info.Temperature_C, 1)
-
-                                    const flood = getFloodRisk(info.Rainfall_mm);
-
-                                    document.getElementById("floodRiskCard").innerText =
-                                        flood;
-
-                                    const fire = getFireRisk(info.Drought_Risk);
-
-                                    document.getElementById("fireRisk").innerText =
-                                        fire;
-
-                                    document.getElementById("fireRiskCard").innerText =
-                                        fire;
-
-                                    document.getElementById("populationCard").innerText =
-                                        info.Population || "N/A";
+                                    document.getElementById("ndviCard").innerText = ndviText;
+                                    document.getElementById("rainfallCard").innerText = rainfallText;
+                                    document.getElementById("temperatureCard").innerText = tempText;
+                                    document.getElementById("floodRiskCard").innerText = info.Flood_Risk;
+                                    document.getElementById("fireRisk").innerText = info.Fire_Risk;
+                                    document.getElementById("fireRiskCard").innerText = info.Fire_Risk;
+                                    document.getElementById("populationCard").innerText = info.Population;
 
                                 })
-
                                 .catch(console.error);
 
                         }
-
                     });
 
                 }

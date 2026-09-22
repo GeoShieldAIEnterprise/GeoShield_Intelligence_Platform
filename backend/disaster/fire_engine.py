@@ -11,6 +11,7 @@ pipeline shape.
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,7 @@ from core.event_enrichment import EventEnrichmentEngine
 from core.risk_engine import RiskEngine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+CACHE_SECONDS = 300  # 5 minutes -- avoids a full live VIIRS+enrichment fetch on every click
 
 
 class FireIntelligenceEngine:
@@ -45,8 +47,14 @@ class FireIntelligenceEngine:
         self.enrichment = EventEnrichmentEngine(self.data_manager)
         self.risk = RiskEngine()
         self.decision = DecisionEngine()
+        self._cache: list[dict[str, Any]] | None = None
+        self._cache_time: float = 0.0
 
     def analyse(self, day_range: int = 1) -> list[dict[str, Any]]:
+        now = time.time()
+        if self._cache is not None and (now - self._cache_time) < CACHE_SECONDS:
+            return self._cache
+
         feed = main_engine.get_viirs_hotspots(day_range=day_range)
         hotspots = feed.get("hotspots", [])
 
@@ -81,6 +89,8 @@ class FireIntelligenceEngine:
                 **decision,
             })
 
+        self._cache = enriched
+        self._cache_time = now
         return enriched
 
     def get_summary(self, county: str | None = None) -> dict[str, Any]:
@@ -93,6 +103,11 @@ class FireIntelligenceEngine:
 
         severity_rank = {"Low": 0, "Moderate": 1, "High": 2, "Extreme": 3}
         risk_level = max((e["severity"] for e in events), default="Low", key=lambda s: severity_rank[s])
+
+        main_engine.submit_engine_output(
+            engine="fire", county=county, metric="severity_rank",
+            value=float(severity_rank[risk_level]), mode="live",
+        )
 
         return {
             "hazard": "fire",

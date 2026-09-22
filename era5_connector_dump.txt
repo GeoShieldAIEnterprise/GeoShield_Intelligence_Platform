@@ -1,0 +1,206 @@
+﻿"""
+GeoShield ERA5/Climate Connector (via Open-Meteo)
+
+Live current-conditions weather data via Open-Meteo (open-meteo.com),
+an ECMWF-based provider used here in place of the official Copernicus
+CDS API for ERA5 -- CDS requests are queued and can take hours to
+fulfill, which does not fit a live dashboard. Open-Meteo integrates
+ECMWF among 15+ national weather services and responds instantly,
+free, with no registration required.
+
+Implements the standard GeoShield BaseConnector interface. Uses
+curl.exe for network access, consistent with the other connectors
+on this machine.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import time
+from pathlib import Path
+from typing import Any
+
+import geopandas as gpd
+
+from core.config import settings
+from .base_connector import BaseConnector
+from .connector_config import ConnectorConfig
+from .connector_result import ConnectorResult
+
+OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+COUNTIES_GEOJSON = Path("frontend/static/data/kenya_counties.geojson")
+CACHE_MINUTES = 30
+
+
+def _curl_get(url: str, timeout: float) -> tuple[bool, str]:
+    """Fetch a URL via curl.exe. Returns (success, text_or_error)."""
+
+    try:
+        result = subprocess.run(
+            ["curl.exe", "-s", "--max-time", str(int(timeout)), url],
+            capture_output=True,
+            text=True,
+            timeout=timeout + 5,
+        )
+
+    except (subprocess.SubprocessError, OSError) as exc:
+        return False, f"curl failed to run: {exc}"
+
+    if result.returncode != 0:
+        return False, f"curl exited with code {result.returncode}: {result.stderr}"
+
+    return True, result.stdout
+
+
+class ERA5Connector(BaseConnector):
+    """Live climate/weather connector via Open-Meteo (ECMWF-based)."""
+
+    def __init__(self, config: ConnectorConfig) -> None:
+        super().__init__(config)
+        self._cache: dict[str, Any] | None = None
+        self._cache_time: float = 0.0
+
+    @property
+    def provider_name(self) -> str:
+        return "ERA5-OpenMeteo"
+
+    def connect(self) -> ConnectorResult:
+        url = f"{OPEN_METEO_URL}?latitude=-1.286389&longitude=36.817223&current=temperature_2m"
+        ok, text = _curl_get(url, min(self.config.timeout, 15))
+
+        if not ok:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="connect",
+                error=f"Unable to reach Open-Meteo: {text}",
+            )
+
+        try:
+            data = json.loads(text)
+
+        except ValueError as exc:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="connect",
+                error=f"Open-Meteo returned an invalid response: {exc}",
+            )
+
+        return ConnectorResult.ok(provider=self.provider_name, operation="connect", data=data)
+
+    def search(self, **filters: Any) -> ConnectorResult:
+        now = time.time()
+
+        if self._cache is not None and (now - self._cache_time) < (CACHE_MINUTES * 60):
+            return ConnectorResult.ok(
+                provider=self.provider_name,
+                operation="search",
+                data=self._cache,
+                metadata={"cached": True, "cache_age_seconds": round(now - self._cache_time)},
+            )
+
+        try:
+            counties = gpd.read_file(COUNTIES_GEOJSON)
+
+        except Exception as exc:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="search",
+                error=f"Failed to load county boundaries: {exc}",
+            )
+
+        names: list[str] = []
+        lats: list[str] = []
+        lons: list[str] = []
+
+        for _, row in counties.iterrows():
+            name = row.get("COUNTY") or row.get("NAME") or row.get("name")
+
+            if not name:
+                continue
+
+            centroid = row.geometry.centroid
+            names.append(name)
+            lats.append(str(round(centroid.y, 4)))
+            lons.append(str(round(centroid.x, 4)))
+
+        lat_param = ",".join(lats)
+        lon_param = ",".join(lons)
+
+        url = (
+            f"{OPEN_METEO_URL}?latitude={lat_param}&longitude={lon_param}"
+            "&current=temperature_2m,relative_humidity_2m,wind_speed_10m,surface_pressure"
+            "&timezone=auto"
+        )
+
+        ok, text = _curl_get(url, min(self.config.timeout, 30))
+
+        if not ok:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="search",
+                error=f"Unable to reach Open-Meteo: {text}",
+            )
+
+        try:
+            data = json.loads(text)
+
+        except ValueError as exc:
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="search",
+                error=f"Open-Meteo returned an invalid response: {exc}",
+            )
+
+        if not isinstance(data, list):
+            data = [data]
+
+        if len(data) != len(names):
+            return ConnectorResult.failure(
+                provider=self.provider_name,
+                operation="search",
+                error=f"Mismatch: {len(names)} counties requested, {len(data)} results returned.",
+            )
+
+        results: dict[str, dict[str, Any]] = {}
+
+        for name, entry in zip(names, data):
+            current = entry.get("current", {})
+            results[name] = {
+                "temperature_c": current.get("temperature_2m"),
+                "humidity_pct": current.get("relative_humidity_2m"),
+                "wind_speed_kmh": current.get("wind_speed_10m"),
+                "pressure_hpa": current.get("surface_pressure"),
+            }
+
+        self._cache = results
+        self._cache_time = now
+
+        return ConnectorResult.ok(
+            provider=self.provider_name,
+            operation="search",
+            data=results,
+            metadata={"cached": False, "county_count": len(results)},
+        )
+
+    def download(self, product_id: str) -> ConnectorResult:
+        return ConnectorResult.failure(
+            provider=self.provider_name,
+            operation="download",
+            error="ERA5-OpenMeteo does not support per-product downloads; use search() instead.",
+        )
+
+
+def build_era5_connector() -> ERA5Connector:
+    """Factory: builds an ERA5Connector (Open-Meteo backed)."""
+
+    config = ConnectorConfig(
+        connector_id="era5_openmeteo",
+        provider="Open-Meteo",
+        enabled=True,
+        base_url=OPEN_METEO_URL,
+        timeout=settings.http_timeout,
+        credentials={},
+    )
+    return ERA5Connector(config)
+

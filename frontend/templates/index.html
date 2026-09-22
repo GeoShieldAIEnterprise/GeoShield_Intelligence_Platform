@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -240,6 +240,217 @@
 }
 </style>
 
+<style id="geoshield-analytics-ui">
+.geoshield-analytics-page {
+    box-sizing: border-box;
+    overflow: auto;
+    background: #07111f;
+    color: #e2e8f0;
+    padding-bottom: 24px;
+}
+
+.geoshield-analytics-page *,
+.geoshield-analytics-page *::before,
+.geoshield-analytics-page *::after {
+    box-sizing: border-box;
+}
+
+.analytics-header {
+    position: relative;
+    z-index: 20;
+}
+
+.analytics-header h2 {
+    margin: 0;
+}
+
+.analytics-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    padding: 16px;
+}
+
+.analytics-card {
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    background: #0a1524;
+    padding: 16px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.analytics-card:hover {
+    border-color: #22d3ee;
+    background: #101d2d;
+}
+
+.analytics-card h3 {
+    margin: 0 0 10px 0;
+    font-size: 15px;
+    color: #f8fafc;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.analytics-card h3::after {
+    content: "\2192";
+    color: #38bdf8;
+    font-size: 14px;
+}
+
+.analytics-card-body {
+    font-size: 13px;
+    color: #94a3b8;
+    line-height: 1.5;
+}
+
+.analytics-card-body .analytics-stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+}
+
+.analytics-card-body .analytics-stat-row strong {
+    color: #e2e8f0;
+}
+
+@media (max-width: 900px) {
+    .analytics-cards-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.analytics-modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: #07111f;
+    z-index: 2000;
+    flex-direction: column;
+}
+
+.analytics-modal-backdrop.analytics-modal-open {
+    display: flex;
+}
+
+.analytics-modal {
+    background: #07111f;
+    width: 100%;
+    height: 100%;
+    max-height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.analytics-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 24px;
+    border-bottom: 1px solid #1e293b;
+    flex-shrink: 0;
+}
+
+.analytics-modal-header h3 {
+    margin: 0;
+    color: #f8fafc;
+    font-size: 22px;
+}
+
+.analytics-modal-close {
+    background: none;
+    border: 1px solid #334155;
+    color: #cbd5e1;
+    border-radius: 6px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.analytics-modal-close:hover {
+    border-color: #38bdf8;
+    color: #38bdf8;
+}
+
+.analytics-modal-body {
+    padding: 20px 24px;
+    overflow: auto;
+    font-size: 13px;
+    flex: 1;
+}
+
+.analytics-chart-container {
+    position: relative;
+    width: 100%;
+    height: 70vh;
+    max-height: 640px;
+}
+
+.analytics-modal-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.analytics-modal-table th {
+    position: sticky;
+    top: 0;
+    background: #101d2d;
+    color: #94a3b8;
+    text-align: left;
+    font-weight: 700;
+    padding: 8px 10px;
+}
+
+.analytics-modal-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #1e293b;
+    white-space: nowrap;
+}
+
+.analytics-modal-table tbody tr:hover {
+    background: rgba(34,211,238,.07);
+}
+
+.analytics-risk-Low { color: #2ecc71; }
+.analytics-risk-Moderate { color: #ffd400; }
+.analytics-risk-High { color: #ff8c00; }
+.analytics-risk-Extreme { color: #ff3b30; }
+
+.analytics-chart-legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+    font-size: 13px;
+    color: #94a3b8;
+}
+
+.analytics-chart-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.analytics-chart-legend-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.analytics-chart-description {
+    color: #94a3b8;
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0 0 16px 0;
+    max-width: 720px;
+}
+</style>
+
+
 </head>
 <body>
 <div class="app">
@@ -252,17 +463,17 @@
         <nav>
             <a class="active">🏠 Dashboard</a>
             <a id="navLiveMap" style="cursor:pointer;">🗺️ Live Map</a>
-            <a>📈 Analytics</a>
-            <a>🚨 Alerts</a>
-            <a>📄 Reports</a>
+            <a id="navAnalytics" style="cursor:pointer;">📈 Analytics</a>
+            <a id="navAlerts" style="cursor:pointer;">🚨 Alerts</a>
+            <a id="navReports" style="cursor:pointer;">📄 Reports</a>
             <hr>
             <a id="navDrought" style="cursor:pointer;">🌾 Drought Engine</a>
             <a id="navFlood" style="cursor:pointer;">🌊 Flood Engine</a>
             <a id="navFire" style="cursor:pointer;">🔥 Fire Engine</a>
-            <a id="navEarthquake" style="cursor:pointer;">🌍 Earthquake Engine</a>
+            <!-- navEarthquake temporarily hidden -->
             <a id="navAgriculture" style="cursor:pointer;">🌿 Agriculture</a>
             <hr>
-            <a>&#9881;&#65039; Settings</a>
+            <!-- Settings temporarily hidden -->
         </nav>
     </aside>
 
@@ -306,7 +517,7 @@
                         <h1 id="events">0</h1>
                     </div>
                     <div class="panel-card">
-                        <h3>🤖 AI Risk</h3>
+                        <h3>🛡️ Overall Risk</h3>
                         <h1 id="aiScore">0%</h1>
                     </div>
                     <div class="panel-card">
@@ -362,7 +573,7 @@
                     <button type="button" id="liveMapSearchBtn">Search</button>
                     <label><input type="radio" name="liveMapView" value="satellite" checked> Satellite</label>
                     <label><input type="radio" name="liveMapView" value="street"> Street</label>
-                    <button type="button" id="liveMapCloseBtn" class="livemap-close-btn" title="Return to Main Map">✕</button>
+                    <button type="button" id="liveMapCloseBtn" class="livemap-close-btn" title="Return to Main Map">&times;</button>
                 </div>
             </div>
             <div id="liveMap" class="livemap-container"></div>
@@ -380,20 +591,17 @@
                     <label><input type="radio" name="floodMapView" value="satellite" checked> Satellite</label>
                     <label><input type="radio" name="floodMapView" value="street"> Street</label>
                     <label><input type="radio" name="floodMapView" value="sar"> Radar (Sentinel-1)</label>
-                    <button type="button" id="floodCloseBtn" class="livemap-close-btn" title="Return to Main Map">✕</button>
+                    <button type="button" id="floodCloseBtn" class="livemap-close-btn" title="Return to Main Map">&times;</button>
                 </div>
             </div>
             <div id="floodMap" class="livemap-container"></div>
             <div id="floodSummaryPanel" class="drought-summary-panel">
-                <div class="drought-summary-card" style="display:flex; gap:12px; align-items:center;">
-                    <span>🌊 Flood risk (rainfall):</span>
-                    <span><span style="display:inline-block;width:10px;height:10px;background:#a8d8ff;"></span> Low (&lt;800mm)</span>
-                    <span><span style="display:inline-block;width:10px;height:10px;background:#4a90e2;"></span> Medium (800-1199mm)</span>
-                    <span><span style="display:inline-block;width:10px;height:10px;background:#0d47a1;"></span> High (&ge;1200mm)</span>
-                </div>
-                <div class="drought-summary-card">
-                    <span>🔥 Live VIIRS Hotspots (Kenya-wide, active-fire proxy)</span>
-                    <strong id="floodHotspotCount">--</strong>
+                <div class="drought-summary-card" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                    <span>🌊 Flood risk:</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;background:#00b894;"></span> Low (&lt;50)</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;background:#f1c40f;"></span> Moderate (50-69)</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;background:#e67e22;"></span> High (70-89)</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;background:#e74c3c;"></span> Extreme (&ge;90)</span>
                 </div>
                 <div class="drought-summary-card">
                     <span>🌊 Highest Flood Risk County</span>
@@ -404,7 +612,7 @@
                     <strong id="floodFlashWatch">--</strong>
                 </div>
                 <div class="drought-summary-card">
-                    <span>🌐 El Niño Monitoring</span>
+                    <span>🌎 El Niño Monitoring</span>
                     <strong>Reference dataset (live ENSO index integration planned)</strong>
                 </div>
             </div>
@@ -421,7 +629,7 @@
                     <input type="text" id="fireSearchInput" placeholder="Search a location...">
                     <label><input type="radio" name="fireMapView" value="satellite" checked> Satellite</label>
                     <label><input type="radio" name="fireMapView" value="street"> Street</label>
-                    <button type="button" id="fireCloseBtn" class="livemap-close-btn" title="Return to Main Map">✕</button>
+                    <button type="button" id="fireCloseBtn" class="livemap-close-btn" title="Return to Main Map">&times;</button>
                 </div>
             </div>
             <div id="fireMap" class="livemap-container"></div>
@@ -437,7 +645,7 @@
                     <strong id="fireHotspotCount">--</strong>
                 </div>
                 <div class="drought-summary-card">
-                    <span>🌿 Highest Fire Risk County (dry vegetation)</span>
+                    <span>🔥 Highest Fire Risk County (dry vegetation)</span>
                     <strong id="fireHighestRiskCounty">--</strong>
                 </div>
                 <div class="drought-summary-card">
@@ -461,7 +669,7 @@
     <input type="text" id="earthquakeSearchInput" placeholder="Search a location...">
     <label><input type="radio" name="earthquakeMapView" value="satellite" checked> Satellite</label>
     <label><input type="radio" name="earthquakeMapView" value="street"> Street</label>
-    <button type="button" id="earthquakeCloseBtn" class="livemap-close-btn" title="Return to Main Map">✕</button>
+    <button type="button" id="earthquakeCloseBtn" class="livemap-close-btn" title="Return to Main Map">&times;</button>
 </div>
             </div>
             <div id="earthquakeMap" class="livemap-container"></div>
@@ -479,7 +687,7 @@
     <strong id="earthquakePopulationNote">Click an event for live reading</strong>
 </div>
 <div class="drought-summary-card" style="font-size:12px; color:#94a3b8;">
-    📡 Live feed: USGS Earthquake Hazards Program (earthquake.usgs.gov). Population exposure: WorldPop Global Project, 2020 modeled population surface, queried live per event.
+    ?? Live feed: USGS Earthquake Hazards Program (earthquake.usgs.gov). Population exposure: WorldPop Global Project, 2020 modeled population surface, queried live per event.
 </div>
             </div>
         </section>
@@ -587,6 +795,55 @@
 
 </section>
 
+
+        <!-- GEOSHIELD ANALYTICS ENGINE PAGE -->
+<section id="geoshieldAnalyticsPage" class="geoshield-workspace-page geoshield-analytics-page">
+
+    <div class="livemap-header analytics-header">
+        <div>
+            <h2>Analytics</h2>
+            <p id="analyticsSceneInfo">
+                Loading cross-engine analytics...
+            </p>
+        </div>
+
+        <div class="livemap-controls analytics-controls">
+            <button
+                type="button"
+                id="analyticsCloseBtn"
+                class="livemap-close-btn"
+                title="Return to Main Map">
+                X
+            </button>
+        </div>
+    </div>
+
+    <div id="analyticsCardsGrid" class="analytics-cards-grid">
+
+        <div class="analytics-card" id="analyticsEngineCard">
+            <h3>Engine Analytics</h3>
+            <div id="analyticsEngineList" class="analytics-card-body">Loading...</div>
+        </div>
+
+        <div class="analytics-card" id="analyticsCountyCard">
+            <h3>47 Counties</h3>
+            <div id="analyticsCountyList" class="analytics-card-body">Loading...</div>
+        </div>
+
+        <div class="analytics-card" id="analyticsSatelliteCard">
+            <h3>Satellite Analytics</h3>
+            <div id="analyticsSatelliteList" class="analytics-card-body">Loading...</div>
+        </div>
+
+        <div class="analytics-card" id="analyticsHealthCard">
+            <h3>GeoShield Health</h3>
+            <div id="analyticsHealthList" class="analytics-card-body">Loading...</div>
+        </div>
+
+    </div>
+
+</section>
+
         <!-- GEOSHIELD DROUGHT ENGINE PAGE -->
         <section id="geoshieldDroughtPage" class="geoshield-workspace-page geoshield-drought-page">
             <div class="livemap-header">
@@ -598,34 +855,80 @@
                     <input type="text" id="droughtSearchInput" placeholder="Search a location...">
                     <label><input type="radio" name="droughtMapView" value="satellite" checked> Satellite</label>
                     <label><input type="radio" name="droughtMapView" value="street"> Street</label>
-                    <button type="button" id="droughtCloseBtn" class="livemap-close-btn" title="Return to Main Map">✕</button>
+                    <button type="button" id="droughtCloseBtn" class="livemap-close-btn" title="Return to Main Map">&times;</button>
                 </div>
             </div>
             <div id="droughtMap" class="livemap-container"></div>
             <div id="droughtSummaryPanel" class="drought-summary-panel">
-                <div class="drought-summary-card" style="display:flex; gap:12px; align-items:center;">
-                    <span>🚨 Drought risk:</span>
-                    <span><span style="display:inline-block;width:10px;height:10px;background:#00b894;"></span> Low (&lt;30%)</span>
-                    <span><span style="display:inline-block;width:10px;height:10px;background:#f1c40f;"></span> Moderate (30-49%)</span>
-                    <span><span style="display:inline-block;width:10px;height:10px;background:#e67e22;"></span> High (50-69%)</span>
-                    <span><span style="display:inline-block;width:10px;height:10px;background:#e74c3c;"></span> Severe (&ge;70%)</span>
+                <div class="drought-summary-card" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                    <span>🌾 Drought risk:</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;background:#00b894;"></span> Low (&lt;50)</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;background:#f1c40f;"></span> Moderate (50-69)</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;background:#e67e22;"></span> High (70-89)</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;background:#e74c3c;"></span> Extreme (&ge;90)</span>
                 </div>
                 <div class="drought-summary-card">
                     <span>🔥 Live VIIRS Hotspots (Kenya-wide)</span>
                     <strong id="droughtHotspotCount">--</strong>
                 </div>
                 <div class="drought-summary-card">
-                    <span>🚨 Highest Drought Risk County</span>
+                    <span>🏜️ Highest Drought Risk County</span>
                     <strong id="droughtHighestRiskCounty">--</strong>
                 </div>
                 <div class="drought-summary-card">
                     <span>🌧️ GPM Precipitation / ERA5 Climate</span>
-                    <strong id="droughtDataNote">Reference dataset (live GPM/ERA5 integration planned)</strong>
+                    <strong id="droughtDataNote" style="color:#00e676;">Live -- GPM/ERA5/Sentinel-2 via Main Engine</strong>
                 </div>
             </div>
         </section>
 
-        <section id="geoshieldIntelligencePage" class="geoshield-workspace-page geoshield-intelligence-page">
+
+        <!-- GEOSHIELD ALERTS PAGE -->
+        <section id="geoshieldAlertsPage" class="geoshield-workspace-page geoshield-alerts-page">
+            <div class="livemap-header">
+                <div>
+                    <h2>🚨 GeoShield Alerts</h2>
+                    <p>New and worsening county-level hazard alerts (Agriculture, Fire, Flood, Drought)</p>
+                </div>
+                <div class="livemap-controls">
+                    <button type="button" id="alertsCloseBtn" class="livemap-close-btn" title="Return to Main Map">&times;</button>
+                </div>
+            </div>
+            <div class="analytics-cards-grid">
+                <div class="analytics-card" id="alertsActiveCard">
+                    <h3>Active Alerts</h3>
+                    <div id="alertsActiveSummary" class="analytics-card-body">Loading...</div>
+                </div>
+                <div class="analytics-card" id="alertsHistoricalCard">
+                    <h3>Historical Alerts</h3>
+                    <div id="alertsHistoricalSummary" class="analytics-card-body">Loading...</div>
+                </div>
+            </div>
+        </section>
+
+                <section id="geoshieldReportsPage" class="geoshield-workspace-page geoshield-reports-page">
+            <div class="livemap-header">
+              <div>
+                  <h2>📄 GeoShield Reports</h2>
+                  <p>Generate downloadable disaster intelligence reports and briefing videos. (Skeleton view -- generation not yet implemented.)</p>
+              </div>
+              <div class="livemap-controls">
+                  <button type="button" id="reportsCloseBtn" class="livemap-close-btn" title="Return to Main Map">&times;</button>
+              </div>
+            </div>
+            <div class="analytics-cards-grid">
+              <div class="analytics-card" id="reportsPdfCard">
+                  <h3>PDF Report</h3>
+                  <div class="analytics-card-body">Click to generate a downloadable disaster intelligence report for any county.</div>
+              </div>
+              <div class="analytics-card" id="reportsVideoCard" style="display:none;">
+                  <h3>Video Briefing</h3>
+                  <div class="analytics-card-body">Coming soon.</div>
+              </div>
+            </div>
+        </section>
+
+<section id="geoshieldIntelligencePage" class="geoshield-workspace-page geoshield-intelligence-page">
             <section id="satelliteCenter" class="satellite-center">
                 <div class="satellite-center-header">
                     <div>
@@ -710,8 +1013,51 @@
 <script src="/static/drought.js"></script>
 <script src="/static/flood.js"></script>
 <script src="/static/fireengine.js"></script>
+<script src="/static/alerts.js"></script>
 <script src="/static/earthquakeengine.js"></script>
+<script src="/static/reports.js"></script>
+
+<div id="reportsModalBackdrop" class="analytics-modal-backdrop">
+    <div class="analytics-modal">
+        <div class="analytics-modal-header">
+            <h3 id="reportsModalTitle">PDF Report</h3>
+            <button type="button" id="reportsModalCloseBtn" class="analytics-modal-close">&#8592; Back to Reports</button>
+        </div>
+        <div id="reportsModalBody" class="analytics-modal-body">
+            <label for="reportsCountySelect" style="display:block;margin-bottom:8px;">Select County</label>
+            <select id="reportsCountySelect" style="width:100%;padding:8px;margin-bottom:16px;"></select>
+            <button type="button" id="reportsDownloadBtn" style="width:100%;padding:10px;cursor:pointer;">Download PDF Report</button>
+            <div id="reportsPdfStatus" style="margin-top:10px;font-size:0.9em;"></div>
+        </div>
+    </div>
+</div>
+
+<div id="analyticsModalBackdrop" class="analytics-modal-backdrop">
+    <div class="analytics-modal">
+        <div class="analytics-modal-header">
+            <h3 id="analyticsModalTitle">Details</h3>
+            <button type="button" id="analyticsModalCloseBtn" class="analytics-modal-close">&#8592; Back to Analytics</button>
+        </div>
+        <div id="analyticsModalBody" class="analytics-modal-body">Loading...</div>
+    </div>
+</div>
+
+<div id="alertsModalBackdrop" class="analytics-modal-backdrop">
+    <div class="analytics-modal">
+        <div class="analytics-modal-header">
+            <h3 id="alertsModalTitle">Details</h3>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <button type="button" id="alertsClearHistoryBtn" class="analytics-modal-close" style="display:none;">Clear All Historical Alerts</button>
+                <button type="button" id="alertsModalCloseBtn" class="analytics-modal-close">&#8592; Back to Alerts</button>
+            </div>
+        </div>
+        <div id="alertsModalBody" class="analytics-modal-body">Loading...</div>
+    </div>
+</div>
+
 <script src="/static/agricultureengine.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/static/analytics.js"></script>
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {

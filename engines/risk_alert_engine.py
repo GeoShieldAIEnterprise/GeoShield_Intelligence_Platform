@@ -221,6 +221,20 @@ class RiskAlertEngine:
                 "Moderate": "Moderate vegetation stress detected.",
                 "Low": "Low vegetation stress detected.",
             },
+
+            "drought": {
+                "Extreme": "Extreme drought risk detected.",
+                "High": "High drought risk detected.",
+                "Moderate": "Moderate drought risk detected.",
+                "Low": "Low drought risk detected.",
+            },
+
+            "flood": {
+                "Extreme": "Extreme flood risk detected.",
+                "High": "High flood risk detected.",
+                "Moderate": "Moderate flood risk detected.",
+                "Low": "Low flood risk detected.",
+            },
         }
 
         return messages.get(
@@ -319,6 +333,18 @@ def build_risk_alert_engine(
     engine.register(
         "agriculture",
         risk_engine.calculate_agriculture_risk,
+    )
+
+    # DROUGHT
+    engine.register(
+        "drought",
+        risk_engine.calculate_drought_risk,
+    )
+
+    # FLOOD
+    engine.register(
+        "flood",
+        risk_engine.calculate_flood_risk,
     )
 
     return engine

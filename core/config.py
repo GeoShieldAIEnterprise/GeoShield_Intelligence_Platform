@@ -128,8 +128,63 @@ class GeoShieldSettings:
     )
 
     # ---------------------------------------------------------
+    # ---------------------------------------------------------
+    # Notifications ? Africa's Talking SMS
+    # ---------------------------------------------------------
+
+    africastalking_username: str = os.getenv(
+        "AFRICASTALKING_USERNAME", ""
+    )
+
+    africastalking_api_key: str = os.getenv(
+        "AFRICASTALKING_API_KEY", ""
+    )
+
+    africastalking_sender_id: str = os.getenv(
+        "AFRICASTALKING_SENDER_ID", ""
+    )
+
+    africastalking_environment: str = os.getenv(
+        "AFRICASTALKING_ENVIRONMENT", "sandbox"
+    ).strip().lower()
+
+    # ---------------------------------------------------------
+    # GeoShield Alert Recipients
+    # ---------------------------------------------------------
+
+    geoshield_alert_sms_recipient: str = os.getenv(
+        "GEOSHIELD_ALERT_SMS_RECIPIENT", ""
+    )
+
+    geoshield_alert_email_primary: str = os.getenv(
+        "GEOSHIELD_ALERT_EMAIL_PRIMARY", ""
+    )
+
+    geoshield_alert_email_secondary: str = os.getenv(
+        "GEOSHIELD_ALERT_EMAIL_SECONDARY", ""
+    )
+
+    # Notifications remain disabled until explicitly enabled.
+    notifications_enabled: bool = os.getenv(
+        "GEOSHIELD_NOTIFICATIONS_ENABLED", "false"
+    ).strip().lower() in {"1", "true", "yes", "on"}
+
     # Runtime
     # ---------------------------------------------------------
+
+    # ---------------------------------------------------------
+    # Local data directory (kept off any cloud-synced folder --
+    # SQLite and other local data files should live here, not
+    # under the project folder, to avoid cloud-sync I/O latency)
+    # ---------------------------------------------------------
+
+    data_dir: str = os.getenv(
+        "GEOSHIELD_DATA_DIR",
+        os.path.join(os.getenv("LOCALAPPDATA", "C:/GeoShield_data"), "GeoShield"),
+    )
+
+    # Reports Engine narrative generation (separate key from Disaster Video Studio).
+    reports_gemini_api_key: str = os.getenv("GEOSHIELD_REPORTS_GEMINI_API_KEY", "")
 
     http_timeout: float = float(
         os.getenv(

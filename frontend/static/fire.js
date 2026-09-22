@@ -1,10 +1,10 @@
-// ======================================================
+﻿// ======================================================
 // Fire Module
 // ======================================================
 
 function loadFireHotspots() {
 
-    fetch("/alerts")
+    fetch("/api/fire/events")
 
         .then(response => response.json())
 
@@ -12,10 +12,9 @@ function loadFireHotspots() {
 
             fireLayer.clearLayers();
 
-            if (!data.alerts)
-                return;
+            if (!Array.isArray(data)) return;
 
-            data.alerts.forEach(alert => {
+            data.forEach(alert => {
 
                 let radius = 6;
                 let fill = "#FFD400";
@@ -67,7 +66,7 @@ function loadFireHotspots() {
 
                 .bindPopup(
 
-`<b>🔥 Wildfire</b><br>
+`<b>ðŸ”¥ Wildfire</b><br>
 FRP: ${alert.frp}<br>
 Brightness: ${alert.brightness}<br>
 Detected: ${alert.time}`

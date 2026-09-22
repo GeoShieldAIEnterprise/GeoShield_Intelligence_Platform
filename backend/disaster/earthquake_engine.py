@@ -108,6 +108,11 @@ class EarthquakeIntelligenceEngine:
         severity_rank = {"Low": 0, "Moderate": 1, "High": 2, "Extreme": 3}
         risk_level = max((e["severity"] for e in events), default="Low", key=lambda s: severity_rank[s])
 
+        main_engine.submit_engine_output(
+            engine="earthquake", county=county, metric="severity_rank",
+            value=float(severity_rank[risk_level]), mode="live",
+        )
+
         return {
             "hazard": "earthquake",
             "county": county or "All 47 Counties",

@@ -20,12 +20,16 @@ from core.connectors.era5_connector import build_era5_connector
 from core.connectors.earthquake_connector import build_earthquake_connector
 from core.connectors.population_connector import build_population_connector
 from core.connectors.sentinel2.sentinel2_ndvi_connector import build_sentinel2_ndvi_connector
+from core.connectors.glofas_flood_connector import build_glofas_flood_connector
+from core.connectors.elevation_connector import build_elevation_connector
 from core.event_bus import EventBus
+from core.notification_engine import NotificationEngine
 from core.risk_engine import RiskEngine
 from engines.risk_alert_engine import build_risk_alert_engine
+from core.config import settings
 
 _auth_manager = CopernicusAuthManager()
-DB_PATH = Path("database/geoshield.db")
+DB_PATH = Path(settings.data_dir) / "geoshield.db"
 SENTINELHUB_WMS_BASE = "https://sh.dataspace.copernicus.eu/ogc/wms/dc50e71d-6b64-4439-84ef-2e704e48f6f5"
 
 def _build_connector_registry() -> ConnectorRegistry:
@@ -36,6 +40,8 @@ def _build_connector_registry() -> ConnectorRegistry:
     registry.register(build_earthquake_connector())
     registry.register(build_population_connector())
     registry.register(build_sentinel2_ndvi_connector())
+    registry.register(build_glofas_flood_connector())
+    registry.register(build_elevation_connector())
     return registry
 
 
@@ -54,6 +60,7 @@ class MainEngine:
         # Hazard-specific risk formulas remain in RiskEngine.
         self.risk_engine = RiskEngine()
         self.event_bus = EventBus()
+        self.notification_engine = NotificationEngine()
         self.risk_alert_engine = build_risk_alert_engine(
             self.risk_engine,
             self.event_bus,
@@ -72,6 +79,27 @@ class MainEngine:
             hazard=hazard,
             event=event,
         )
+
+    def dispatch_alert_notification(
+        self,
+        alert: dict[str, Any],
+        *,
+        dry_run: bool = True,
+    ) -> dict[str, Any]:
+        """Dispatch an existing alert through the notification service."""
+        try:
+            return self.notification_engine.send_sms(
+                alert,
+                dry_run=dry_run,
+            )
+        except Exception as exc:
+            # Notification failures must not interrupt GeoShield's alert pipeline.
+            return {
+                "status": "failed",
+                "provider": "notification_engine",
+                "reason": str(exc),
+                "sent": False,
+            }
 
     def get_alert_history(self, limit: int = 50) -> list[dict[str, Any]]:
         """Return the latest standardized GeoShield alerts."""
@@ -214,6 +242,82 @@ class MainEngine:
         self._last_status["gpm"] = result
         return result
 
+    def get_river_discharge(self) -> dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        connector = self.connectors.get("GloFAS-OpenMeteo")
+
+        if connector is None or not connector.is_enabled():
+            result = {
+                "mode": "mock",
+                "provider": "GloFAS-OpenMeteo",
+                "counties": {},
+                "checked_at": now,
+            }
+            self._last_status["glofas"] = result
+            return result
+
+        result_obj = connector.search()
+
+        if not result_obj.success:
+            print(f"[MainEngine] GloFAS search failed: {result_obj.error}")
+            result = {
+                "mode": "mock",
+                "provider": "GloFAS-OpenMeteo",
+                "counties": {},
+                "error": result_obj.error,
+                "checked_at": now,
+            }
+            self._last_status["glofas"] = result
+            return result
+
+        result = {
+            "mode": "live",
+            "provider": "GloFAS-OpenMeteo",
+            "counties": result_obj.data,
+            "cached": result_obj.metadata.get("cached", False),
+            "checked_at": now,
+        }
+        self._last_status["glofas"] = result
+        return result
+
+    def get_terrain(self) -> dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        connector = self.connectors.get("Copernicus-DEM-OpenMeteo")
+
+        if connector is None or not connector.is_enabled():
+            result = {
+                "mode": "mock",
+                "provider": "Copernicus-DEM-OpenMeteo",
+                "counties": {},
+                "checked_at": now,
+            }
+            self._last_status["elevation"] = result
+            return result
+
+        result_obj = connector.search()
+
+        if not result_obj.success:
+            print(f"[MainEngine] Elevation search failed: {result_obj.error}")
+            result = {
+                "mode": "mock",
+                "provider": "Copernicus-DEM-OpenMeteo",
+                "counties": {},
+                "error": result_obj.error,
+                "checked_at": now,
+            }
+            self._last_status["elevation"] = result
+            return result
+
+        result = {
+            "mode": "live",
+            "provider": "Copernicus-DEM-OpenMeteo",
+            "counties": result_obj.data,
+            "cached": result_obj.metadata.get("cached", False),
+            "checked_at": now,
+        }
+        self._last_status["elevation"] = result
+        return result
+
     def get_era5_weather(self) -> dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
         connector = self.connectors.get("ERA5-OpenMeteo")
@@ -351,6 +455,24 @@ class MainEngine:
     def get_satellite_live_status(self, satellite_id: str) -> dict[str, Any] | None:
         """Return the last-known live status for a satellite without triggering a fresh call."""
         return self._last_status.get(satellite_id)
+
+    def submit_engine_output(self, engine: str, county: str | None, metric: str, value: float | None, mode: str = "live") -> None:
+        """Called by registered engines to persist a snapshot for Analytics history/graphs."""
+        if value is None:
+            return
+        if not DB_PATH.exists():
+            return
+        try:
+            conn = sqlite3.connect(str(DB_PATH))
+            conn.execute(
+                "INSERT INTO analytics_history (engine, county, metric, value, mode, recorded_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (engine, county, metric, value, mode, datetime.now(timezone.utc).isoformat()),
+            )
+            conn.commit()
+            conn.close()
+        except Exception as exc:
+            print(f"[MainEngine] submit_engine_output failed for {engine}/{metric}: {exc!r}")
 
     def get_hazard_summary(self, hazard: str, county: str | None = None) -> dict[str, Any]:
         if hazard in self.registered_engines:

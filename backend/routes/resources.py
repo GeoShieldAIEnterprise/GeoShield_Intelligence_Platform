@@ -2,11 +2,13 @@ from fastapi import APIRouter
 import sqlite3
 
 from backend.services.dispatcher import get_nearest_resources
+from core.config import settings
+from pathlib import Path
 
 router = APIRouter()
 
 
-DATABASE = "database/geoshield.db"
+DATABASE = Path(settings.data_dir) / "geoshield.db"
 
 
 @router.get("/resources/{county}")

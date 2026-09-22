@@ -13,7 +13,7 @@ window.GeoShieldConfig = {
 
         dashboard: "/dashboard",
 
-        alerts: "/alerts",
+        alerts: "/api/alerts",
 
         county: "/county",
 

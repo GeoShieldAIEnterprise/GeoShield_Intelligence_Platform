@@ -32,6 +32,14 @@ def resources(county: str | None = Query(default=None)):
 def hazard_summary(hazard: str, county: str | None = Query(default=None)):
     return main_engine.get_hazard_summary(hazard=hazard, county=county)
 
+@router.get("/river-discharge")
+def river_discharge():
+    return main_engine.get_river_discharge()
+
+@router.get("/terrain")
+def terrain():
+    return main_engine.get_terrain()
+
 
 
 

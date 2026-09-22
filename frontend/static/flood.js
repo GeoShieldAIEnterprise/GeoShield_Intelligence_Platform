@@ -29,7 +29,6 @@ window.GeoShieldFlood = {
 
             this.loadSatelliteLayer();
             this.loadCountyFloodLayer();
-            this.loadViirsHotspots();
             this.loadSummary();
 
             const searchInput = document.getElementById("floodSearchInput");
@@ -78,41 +77,31 @@ window.GeoShieldFlood = {
 
     async loadCountyFloodLayer() {
         try {
-            const [geoRes, countiesRes, gpmRes, era5Res] = await Promise.all([
+            const [geoRes, liveRes] = await Promise.all([
                 fetch("/static/data/kenya_counties.geojson"),
-                fetch("/counties"),
-                fetch("/api/main-engine/gpm-rainfall"),
-                fetch("/api/main-engine/era5-weather")
+                fetch("/api/flood/live")
             ]);
             const data = await geoRes.json();
-            const countiesList = await countiesRes.json();
-            const gpmData = await gpmRes.json();
-            const gpmCounties = gpmData.counties || {};
-            const era5Data = await era5Res.json();
-            const era5Counties = era5Data.counties || {};
+            const liveList = await liveRes.json();
 
             const countyLookup = {};
-            countiesList.forEach(c => { countyLookup[c.County] = c; });
+            liveList.forEach(r => { countyLookup[r.county] = r; });
             this.countyLookup = countyLookup;
 
-            const floodRiskLabel = (rainfall) => {
-                if (rainfall >= 1200) return "HIGH";
-                if (rainfall >= 800) return "MEDIUM";
-                return "LOW";
+            const severityColor = (severity) => {
+                switch (severity) {
+                    case "Extreme": return "#e74c3c";
+                    case "High": return "#e67e22";
+                    case "Moderate": return "#f1c40f";
+                    default: return "#00b894";
+                }
             };
 
-            const flashFloodWatch = (info) => {
-                return (Number(info.Temperature_C) >= 32 && Number(info.NDVI) <= 0.35);
-            };
-
-            let flashCounties = [];
-            countiesList.forEach(c => {
-                if (flashFloodWatch(c)) flashCounties.push(c.County);
-            });
+            let flashCounties = liveList.filter(r => r.flash_flood_watch).map(r => r.county);
             const flashEl = document.getElementById("floodFlashWatch");
             if (flashEl) {
                 flashEl.innerText = flashCounties.length
-                    ? `${flashCounties.length} counties (${flashCounties.slice(0, 5).join(", ")}${flashCounties.length > 5 ? "..." : ""})`
+                    ? flashCounties.length + " counties (" + flashCounties.slice(0, 5).join(", ") + (flashCounties.length > 5 ? "..." : "") + ")"
                     : "None currently";
             }
 
@@ -120,36 +109,40 @@ window.GeoShieldFlood = {
                 style: (feature) => {
                     const county = feature.properties.COUNTY || feature.properties.NAME || feature.properties.name || "Unknown";
                     const info = countyLookup[county];
-                    const rainfall = info ? Number(info.Rainfall_mm || 0) : 0;
-                    let fill = "#a8d8ff";
-                    if (rainfall >= 800) fill = "#4a90e2";
-                    if (rainfall >= 1200) fill = "#0d47a1";
+                    const fill = info ? severityColor(info.severity) : "#475569";
                     return { color: "#55ffff", weight: 1, fillColor: fill, fillOpacity: 0.5 };
                 },
                 onEachFeature: (feature, layer) => {
                     const county = feature.properties.COUNTY || feature.properties.NAME || feature.properties.name || "Unknown";
 
                     layer.on({
-                        mouseover: (e) => e.target.setStyle({ weight: 3, color: "#00ff88", fillOpacity: 0.65 }),
+                        mouseover: (e) => e.target.setStyle({ weight: 3, color: "#00ff88", fillOpacity:0.65 }),
                         mouseout: (e) => this.countyLayer.resetStyle(e.target),
                         click: () => {
                             const info = countyLookup[county];
-                            if (!info) return;
+                            if (!info) {
+                                layer.bindPopup("<b>" + county + "</b><br>Live flood data unavailable.").openPopup();
+                                return;
+                            }
 
-                            const risk = floodRiskLabel(Number(info.Rainfall_mm));
-                            const flash = flashFloodWatch(info) ? "ELEVATED (hot + sparse vegetation)" : "Standard";
+                            const ndvi = info.ndvi != null ? Number(info.ndvi).toFixed(3) : "--";
+                            const actions = Array.isArray(info.recommended_actions)
+                                ? info.recommended_actions.map(a => "<li>" + a + "</li>").join("")
+                                : "";
+                            const flash = info.flash_flood_watch ? "ELEVATED (hot + sparse vegetation)" : "Standard";
 
-                            layer.bindPopup(`
-                                <b>${info.County}</b>
-                                <hr>
-                                🌧️ Rainfall (GPM ref.): ${Number(info.Rainfall_mm).toFixed(0)} mm<br>
-                                🌡️ Temperature (ERA5 ref.): ${Number(info.Temperature_C).toFixed(1)} °C<br>
-                                🌿 NDVI: ${Number(info.NDVI).toFixed(2)}<br>
-                                🌊 Flood Risk: ${risk}<br>
-                                ⚡ Flash Flood Watch: ${flash}<br>
-                                \ud83c\udf27\ufe0f Today's rainfall (GPM live): ${gpmCounties[county] !== undefined ? gpmCounties[county] + " mm" : "unavailable"}<br>
-                                \ud83c\udf21\ufe0f Temperature (ERA5 live): ${era5Counties[county] !== undefined ? era5Counties[county].temperature_c + " \u00b0C" : "unavailable"}
-                            `).openPopup();
+                            const popupHtml =
+                                "<div style=\"min-width:230px;\">" +
+                                "<b>" + county + "</b><hr>" +
+                                "Rainfall (GPM live): " + (info.rainfall_mm != null ? Number(info.rainfall_mm).toFixed(1) + " mm" : "--") + "<br>" +
+                                "Temperature (ERA5 live): " + (info.temperature_c != null ? Number(info.temperature_c).toFixed(1) + " C" : "--") + "<br>" +
+                                "NDVI (Sentinel-2 live): " + ndvi + "<br>" +
+                                "Flood Risk: <b style=\"color:" + severityColor(info.severity) + "\">" + info.severity + "</b> (" + info.risk_score + "/100)<br>" +
+                                "Flash Flood Watch: " + flash +
+                                "<div style=\"margin-top:6px;\"><b>Recommended actions:</b><ul style=\"margin:4px 0 0 16px;padding:0;\">" + actions + "</ul></div>" +
+                                "</div>";
+
+                            layer.bindPopup(popupHtml).openPopup();
 
                             this.map.fitBounds(layer.getBounds(), { padding: [20, 20], maxZoom: 9 });
                         }
@@ -158,6 +151,9 @@ window.GeoShieldFlood = {
             }).addTo(this.map);
 
             this.map.fitBounds(this.countyLayer.getBounds(), { padding: [10, 10] });
+
+            const info = document.getElementById("floodSceneInfo");
+            if (info) info.innerText = "Flood intelligence -- checked " + new Date().toLocaleString();
 
         } catch (error) {
             console.error("[Flood] county layer failed:", error);
@@ -202,11 +198,13 @@ window.GeoShieldFlood = {
 
     async loadSummary() {
         try {
-            const res = await fetch("/summary");
-            const data = await res.json();
+            const res = await fetch("/api/flood/live");
+            const records = await res.json();
             const el = document.getElementById("floodHighestRiskCounty");
-            if (el && data.highest_rainfall) {
-                el.innerText = `${data.highest_rainfall.County} (${Number(data.highest_rainfall.Rainfall_mm).toFixed(0)} mm)`;
+            if (el && records.length) {
+                const rank = { "Low": 0, "Moderate": 1, "High": 2, "Extreme": 3 };
+                const highest = [...records].sort((a, b) => (rank[b.severity] ?? 0) - (rank[a.severity] ?? 0))[0];
+                el.innerText = highest.county + " (" + highest.severity + " - " + highest.risk_score + "/100)";
             }
         } catch (error) {
             console.error("[Flood] summary failed:", error);

@@ -4,7 +4,10 @@
 
 function loadDashboard() {
 
-    fetch("/api/dashboard")
+    const county = window.currentCounty;
+    const url = county ? "/api/dashboard?county=" + encodeURIComponent(county) : "/api/dashboard";
+
+    fetch(url)
 
         .then(response => response.json())
 
@@ -19,8 +22,15 @@ function loadDashboard() {
             document.getElementById("events").innerText =
                 data.alerts ?? "--";
 
-            document.getElementById("aiScore").innerText =
-                (data.ai_risk ?? 0) + "%";
+            const overallEl = document.getElementById("aiScore");
+            const overallRisk = data.overall_risk ?? "--";
+            const overallPercent = data.overall_risk_percent;
+            overallEl.innerText = (overallPercent != null) ? overallPercent + "%" : "--";
+            const overallColors = {
+                "Low": "#00b894", "Moderate": "#f1c40f",
+                "High": "#e67e22", "Extreme": "#e74c3c"
+            };
+            overallEl.style.color = overallColors[overallRisk] || "";
 
             document.getElementById("fireRisk").innerText =
                 data.fire_risk ?? "--";
