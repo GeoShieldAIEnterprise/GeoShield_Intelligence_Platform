@@ -2439,3 +2439,282 @@ Continue with the Gemini narrative-generation function for the Reports Engine. I
 Do not claim narrative generation is implemented until it has been added and tested.
 
 ---
+
+---
+
+# GEOSHIELD AI ENTERPRISE V2 — MASTER DEVELOPMENT ROADMAP
+
+**Status:** Planned development roadmap. This section records intended work, not proof of implementation.
+
+## 1. V2 Vision
+
+GeoShield AI Enterprise V2 is the planned evolution of GeoShield into a Kenya-wide, multi-hazard geospatial intelligence, agricultural monitoring, food-security, and emergency-response decision-support platform.
+
+The platform will build on the existing satellite integrations, Main Engine, hazard engines, Live Map, dashboard, and Reports Engine. Existing architecture and verified functionality must be preserved unless an evidence-based change is required.
+
+## 2. Development Rules
+
+- Use VS Code Terminal / PowerShell only for GeoShield development.
+- No Cursor, GitHub Copilot, or VS AI unless the user explicitly changes this constraint.
+- Never patch on a guess. Trace the code path, inspect actual errors and API responses, and verify the fix.
+- Preserve working architecture and existing functionality.
+- Separate verified capabilities, confirmed root causes, pending investigations, and planned features.
+- Do not present estimates as confirmed observations or unavailable data as live.
+- Validate syntax and test actual application behavior after changes.
+- Keep secrets, credentials, .env files, and sensitive operational data out of Git.
+- Update this context file as verified milestones and decisions are completed.
+- Do not mark a V2 feature complete until it has been implemented and tested.
+
+## 3. Initial V2 Priorities
+
+### 3.1 Achievements Documentation
+Create ACHIEVEMENTS.md in the project root. Document verified milestones, integrations, engines, and completed fixes. Commit and push it to the GeoShield GitHub repository.
+
+### 3.2 Restore Earthquake UI Card
+Trace the existing earthquake backend/API and restore its frontend card. Reuse the existing backend data and avoid duplicating hazard logic in the UI.
+
+### 3.3 Disaster Video Studio Integration and Reliability
+Connect GeoShield Disaster Video Intelligence Studio to GeoShield AI through defined interfaces/APIs. Audit its local fallbacks, identify actual causes, correct provider configuration and error handling, and retain local fallback as a controlled recovery mechanism.
+
+### 3.4 Satellite Reliability and Multi-Source Data
+Audit satellite fallbacks and provider failures. Add provider health checks, data freshness validation, provenance, and controlled failover. Assess additional satellite and live-data sources. Do not assume that adding providers automatically guarantees uninterrupted coverage.
+
+## 4. Satellite Change Detection and Imagery Intelligence
+
+### 4.1 Sentinel-2 Change Detection
+Develop an observation-driven engine that compares new usable Sentinel-2 imagery with appropriate historical or pre-event imagery.
+
+Planned workflow:
+1. Retrieve new imagery for an area of interest.
+2. Select a suitable baseline image.
+3. Validate cloud cover, quality, acquisition dates, and spatial alignment.
+4. Apply cloud masking and preprocessing.
+5. Calculate relevant spectral indices and change metrics.
+6. Detect and filter meaningful changes and false positives.
+7. Produce change maps, area statistics, timestamps, and explanations.
+8. Make results available to the Live Map, Alerts Engine, Reports Engine, Analytics Engine, and GeoShield AI.
+
+Target use cases include flood extent changes, wildfire burn scars, vegetation loss/recovery, drought stress, agricultural change, and visible infrastructure/land-cover change where resolution permits.
+
+A Sentinel-2 revisit does not guarantee a usable cloud-free observation. Change detection must distinguish actual change from cloud, shadow, seasonal variation, sensor effects, and other false positives.
+
+### 4.2 Landsat + Sentinel-2 Comparison and Harmonization
+Test whether compatible Landsat and Sentinel-2 observations can improve GeoShield's imagery coverage and analysis.
+
+Planned work:
+- Retrieve spatially and temporally compatible scenes.
+- Validate source metadata, quality, cloud cover, and acquisition times.
+- Harmonize compatible bands, reflectance, projections, and grids.
+- Compare observations and quantify sensor differences.
+- Test NASA HLS or an equivalent validated harmonization workflow.
+- Produce source-attributed GeoShield composite/harmonized layers where scientifically appropriate.
+
+Do not assume arbitrary tile blending produces sharper or more accurate imagery. Preserve native Sentinel-2 detail where suitable. Validate any fusion or resampling method before operational use and respect source licensing and redistribution terms.
+
+## 5. Flood Engine — Expanded Scope
+
+The Flood Engine will retain rainfall and drainage as its initial core focus and progressively add validated hazard-specific modules.
+
+Planned modules:
+1. Rainfall Flood Risk — intensity, accumulation, forecast rainfall, and drainage constraints.
+2. Flash Flood Intelligence — rapid-onset conditions and downstream exposure.
+3. Riverine Flood Intelligence — river observations, catchments, and floodplain conditions.
+4. Drainage and Terrain — flow accumulation, slope, and drainage-capacity proxies.
+5. El Niño / ENSO Intelligence — climate phase and seasonal rainfall outlooks as contextual flood-risk signals, not direct local flash-flood triggers.
+6. Tsunami Intelligence — authoritative tsunami warnings and coastal exposure/response support. Tsunamis are a distinct coastal hazard, not a rainfall-driven flood mechanism.
+7. Urban Flood Intelligence — localized rainfall, impervious surfaces, and drainage where data permit.
+8. Soil Saturation / Antecedent Conditions.
+9. Dam, Reservoir, and River-Release Intelligence where verified data are available.
+10. Coastal Flooding and Storm Surge, distinct from tsunami hazards.
+11. Flood Change Detection using satellite-observed water extent.
+12. Flood Exposure and Impact — people, infrastructure, and agriculture.
+13. Flood Forecasting and Alerting — confidence-qualified, time-stamped outputs.
+14. Flood Recovery Intelligence — recession, visible damage, and recovery indicators.
+
+Future modules must use appropriate data, validation, and hazard-specific methods. Do not imply that all modules are implemented or that every hazard can be forecast with equal confidence.
+
+## 6. Kenya-Wide Alerts and Emergency Response Intelligence
+
+Expand the Alerts Engine beyond Nairobi toward Kenya-wide coverage, initially prioritizing fires and flash floods while supporting longer-term hazards.
+
+Alert classes:
+- Rapid-onset: fires, flash floods, and other fast-developing incidents.
+- Long-term: drought, agricultural stress, persistent flood risk, and other evolving hazards.
+
+Planned map layers:
+- Active and historical alerts.
+- County, subcounty, ward, and relevant local boundaries.
+- Emergency resources: fire stations, ambulances, hospitals, rescue teams, shelters, and other verified facilities.
+- Population estimates and exposure.
+- Vulnerability indicators, with responsible use of sensitive data.
+- Road networks, access restrictions, response routes, and live traffic where providers support it.
+- Incident footprints, historical events, and response records.
+
+Alert intelligence may include hazard type, location, likely cause and confidence, severity, source evidence, estimated exposed population, verified injuries/casualties where available, vulnerable groups, nearby resources, traffic/routes, recommended actions, and timestamps.
+
+Resource locations must not be represented as proof of operational readiness. Population estimates must not be presented as live headcounts. Injuries, casualties, traffic, and resource availability must be verified or explicitly marked unknown, estimated, or unverified.
+
+Investigate alternatives to Brevo and Africa's Talking. Evaluate a GeoShield-owned notification orchestration layer with interchangeable delivery providers, retries, delivery logs, acknowledgements, and escalation. Building a proprietary telecom network is not assumed to be required.
+
+## 7. Crop-Based Agriculture and Polygon Intelligence
+
+### 7.1 Crop-Based Agricultural Intelligence
+Move from generic county temperature/rainfall risk toward crop-specific suitability and agricultural risk.
+
+Planned capabilities:
+- Crop datasets by county and, where available, more localized areas.
+- Crop-specific temperature, rainfall, soil, and growth-stage requirements.
+- Crop condition, suitability, stress, and risk indicators.
+- Integration with NDVI, drought, flood, and relevant environmental data.
+- Crop-specific mitigation recommendations with evidence and uncertainty.
+
+High temperature or rainfall must not automatically be classified as agricultural risk without considering crop-specific tolerances, growth stage, and local context.
+
+### 7.2 Polygon Drawing and Area-of-Interest Analysis
+Allow farmers, cartographers, and other users to draw polygons, upload boundaries, or select an area.
+
+Develop a shared geospatial analysis service that returns available temperature, rainfall, NDVI, drought, fire, flood, crop/agricultural risk, area statistics, data freshness, and practical recommendations for the selected geometry.
+
+Reuse this capability across Agriculture, Satellite Intelligence, Flood, Fire, Analytics, Reports, and GeoShield AI. Clearly identify unavailable datasets and spatial-resolution limits.
+
+## 8. Food Security Intelligence Engine
+
+Create a dedicated Food Security capability connected to Agriculture, Flood, Drought, Satellite Intelligence, Analytics, and GeoShield AI.
+
+Initial MVP:
+- Crop condition and production-anomaly indicators.
+- Rainfall anomalies, drought stress, and flood disruption.
+- Available food-security datasets and geographic indicators.
+- County-level monitoring and historical trends.
+- Food supply disruption indicators where supported.
+- Evidence-based monitoring and mitigation recommendations.
+
+Longer-term expansion may include market prices, household food access, affordability, nutrition indicators, food availability, supply-chain disruptions, and stability.
+
+Food security is broader than crop production. Do not infer household hunger, malnutrition, or food availability from satellite imagery alone.
+
+## 9. Analytics Engine — Continuous Data Analysis
+
+Develop the Analytics Engine as a continuously operating backend service, independent of whether a dashboard is open.
+
+Planned capabilities:
+- Data ingestion and source-health analytics.
+- Data quality, missing-value, anomaly, and freshness checks.
+- Geospatial statistics and zonal analysis.
+- Time-series, trend, and seasonal analysis.
+- Hazard analytics and cross-county comparisons.
+- Model validation and forecast verification against observed outcomes.
+- Reproducible analysis, charts, maps, and executive-ready explanations.
+- Presentation/report outputs explaining methodology, evidence, assumptions, and limitations.
+
+Use scheduled and event-triggered jobs, persistent results, retries, logging, and job-health monitoring. The UI should display actual job status, processing lag, data freshness, and validation metrics. "Always running" means monitored backend processing, not an unverified claim of uninterrupted operation.
+
+## 10. Functional UI Cards
+
+Assess and add functional cards connected to real APIs/engines, including:
+- GeoShield Map.
+- Alerts & Emergency Response.
+- Satellite Intelligence and Change Detection.
+- Agriculture.
+- Food Security.
+- Analytics.
+- Disaster Video Studio.
+- GeoShield AI Assistant.
+- Reports & Intelligence.
+- Weather & Climate.
+- Water Resources.
+- Infrastructure Exposure.
+- Population & Vulnerability.
+- Environmental Monitoring.
+- Recovery & Reconstruction.
+- Data Source Health.
+- Scenario Simulator.
+
+Cards must show real data or clearly identify planned/unavailable functionality. Avoid fabricated metrics and duplicate cards that fragment the same capability.
+
+## 11. GeoShield AI Interactive Intelligence Engine
+
+Develop a GeoShield-specific conversational assistant grounded in authorized platform data and tools.
+
+Planned capabilities:
+- Answer questions about GeoShield hazards, imagery, agriculture, food security, maps, alerts, analytics, and reports.
+- Retrieve current platform data through controlled APIs/tools.
+- Explain risk classifications, evidence, assumptions, and uncertainty.
+- Compare locations, time periods, and observations.
+- Generate summaries and reports.
+- Offer recommendations while preserving human decision authority.
+
+Requirements:
+- Access control and protection of classified/restricted information.
+- No fabricated live data or unsupported claims.
+- Clear distinction between observation, estimate, forecast, and recommendation.
+- Auditable tool use and outputs.
+- No unauthorized emergency dispatch or consequential action without an explicitly authorized workflow.
+
+The AI is the primary intelligence interface, not an unrestricted authority over engines or emergency decisions.
+
+## 12. Responsive Cross-Device UI
+
+Make GeoShield usable across desktops, laptops, phones, tablets, and iPads.
+
+Planned work:
+- Responsive layouts using appropriate breakpoints, CSS Grid, and Flexbox.
+- Touch-friendly map and polygon-drawing controls.
+- Adaptive panels, navigation, cards, tables, and charts.
+- Mobile map-first views and compact panels.
+- Performance optimization for lower-powered devices and slower networks.
+- Cross-browser and cross-device testing.
+
+Preserve the existing Map / Intelligence page separation and page-visibility behavior while improving responsiveness. Avoid a wholesale redesign that destabilizes existing functionality.
+
+## 13. Suggested Implementation Sequence
+
+Phase 1 — Foundation:
+- Achievements file and GitHub push.
+- Restore Earthquake card.
+- Audit Disaster Studio and satellite fallbacks.
+- Establish regression tests and verify repository state.
+
+Phase 2 — Data and imagery:
+- Disaster Studio integration.
+- Provider health and failover.
+- Sentinel-2 Change Detection.
+- Landsat-Sentinel comparison proof of concept.
+- Shared Area-of-Interest Analysis API.
+
+Phase 3 — Hazard and agricultural intelligence:
+- Flood Engine expansion framework.
+- ENSO and tsunami source integration.
+- Crop-based Agriculture.
+- Polygon analysis.
+- Food Security MVP.
+
+Phase 4 — National response and analytics:
+- Kenya-wide Alerts and response map.
+- Resource, population, vulnerability, traffic, and route data integrations.
+- Historical/active alert registry.
+- Continuous Analytics Engine.
+- Functional UI card expansion.
+
+Phase 5 — AI, responsive UI, and validation:
+- GeoShield AI Assistant.
+- Authorized cross-engine retrieval.
+- Responsive UI.
+- End-to-end testing, security, reliability, and performance validation.
+
+This sequence is a planning framework, not a delivery guarantee. Provider access, data quality, validation, engineering capacity, and funding may change timelines. Parallel work must not compromise the existing platform.
+
+## 14. Definition of Done
+
+A V2 feature is complete only when:
+- Its scope and data sources are documented.
+- The implementation is connected to the intended engine/API.
+- Relevant tests pass.
+- Actual behavior is verified in the running application.
+- Failures, stale data, and uncertainty are handled transparently.
+- Existing functionality has not regressed.
+- Documentation reflects the verified result.
+- Git changes are reviewed before commit and push.
+
+**Roadmap status:** Planned. Update individual items only as work is implemented and verified.
+
